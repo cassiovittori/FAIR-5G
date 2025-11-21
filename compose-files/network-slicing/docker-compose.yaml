@@ -357,8 +357,8 @@ configs:
   ue2_config:
     file: ../../configs/network-slicing/ue2.yaml
   prometheus_config:
-    file: ../../configs/metrics/prometheus.yml
+    file: ../../configs/network-slicing/prometheus.yml
   grafana_datasource:
-    file: ../../configs/metrics/grafana/datasource.yaml
+    file: ../../configs/network-slicing/grafana/datasource.yaml
   grafana_dashboard_provider:
-    file: ../../configs/metrics/grafana/dashboard_provider.yaml
+    file: ../../configs/network-slicing/grafana/dashboard_provider.yaml
