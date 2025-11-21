@@ -1,0 +1,364 @@
+services:
+  db:
+    container_name: db
+    image: "mongo:${MONGODB_VERSION}"
+    command: "mongod --bind_ip 0.0.0.0 --port 27017"
+    networks:
+      open5gs:
+        aliases:
+          - db.open5gs.org
+    volumes:
+      - db_data:/data/db
+      - db_config:/data/configdb
+    ports:
+      - "0.0.0.0:27017:27017/tcp"
+
+  nrf:
+    container_name: nrf
+    image: "ghcr.io/borjis131/nrf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/nrf.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - nrf.open5gs.org
+    configs:
+      - source: nrf_config
+        target: /etc/open5gs/custom/nrf.yaml
+
+  ausf:
+    container_name: ausf
+    image: "ghcr.io/borjis131/ausf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/ausf.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - ausf.open5gs.org
+    configs:
+      - source: ausf_config
+        target: /etc/open5gs/custom/ausf.yaml
+    depends_on:
+      - nrf
+
+  udm:
+    container_name: udm
+    image: "ghcr.io/borjis131/udm:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/udm.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - udm.open5gs.org
+    configs:
+      - source: udm_config
+        target: /etc/open5gs/custom/udm.yaml
+    depends_on:
+      - nrf
+
+  udr:
+    container_name: udr
+    image: "ghcr.io/borjis131/udr:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/udr.yaml"
+    restart: unless-stopped
+    networks:
+      open5gs:
+        aliases:
+          - udr.open5gs.org
+    configs:
+      - source: udr_config
+        target: /etc/open5gs/custom/udr.yaml
+    depends_on:
+      - db
+      - nrf
+
+  nssf:
+    container_name: nssf
+    image: "ghcr.io/borjis131/nssf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/nssf.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - nssf.open5gs.org
+    configs:
+      - source: nssf_config
+        target: /etc/open5gs/custom/nssf.yaml
+    depends_on:
+      - nrf
+
+  bsf:
+    container_name: bsf
+    image: "ghcr.io/borjis131/bsf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/bsf.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - bsf.open5gs.org
+    configs:
+      - source: bsf_config
+        target: /etc/open5gs/custom/bsf.yaml
+    depends_on:
+      - nrf
+
+  pcf:
+    container_name: pcf
+    image: "ghcr.io/borjis131/pcf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/pcf.yaml"
+    restart: unless-stopped
+    networks:
+      open5gs:
+        aliases:
+          - pcf.open5gs.org
+    configs:
+      - source: pcf_config
+        target: /etc/open5gs/custom/pcf.yaml
+    depends_on:
+      - db
+      - nrf
+
+  amf:
+    container_name: amf
+    image: "ghcr.io/borjis131/amf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/amf.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - amf.open5gs.org
+    configs:
+      - source: amf_config
+        target: /etc/open5gs/custom/amf.yaml
+    depends_on:
+      - nrf
+
+  smf1:
+    container_name: smf1
+    image: "ghcr.io/borjis131/smf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/smf1.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - smf1.open5gs.org
+    configs:
+      - source: smf1_config
+        target: /etc/open5gs/custom/smf1.yaml
+    depends_on:
+      - nrf
+      - upf1
+
+  smf2:
+    container_name: smf2
+    image: "ghcr.io/borjis131/smf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/smf2.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - smf2.open5gs.org
+    configs:
+      - source: smf2_config
+        target: /etc/open5gs/custom/smf2.yaml
+    depends_on:
+      - nrf
+      - upf2
+
+  upf1:
+    container_name: upf1
+    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/upf1.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - upf1.open5gs.org
+    configs:
+      - source: upf1_config
+        target: /etc/open5gs/custom/upf1.yaml
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+
+  upf2:
+    container_name: upf2
+    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/upf2.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - upf2.open5gs.org
+    configs:
+      - source: upf2_config
+        target: /etc/open5gs/custom/upf2.yaml
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+
+  gnb:
+    container_name: gnb
+    image: "ghcr.io/borjis131/gnb:v3.2.7"
+    command: "-c /UERANSIM/config/gnb.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - gnb.ueransim.org
+    configs:
+      - source: gnb_config
+        target: /UERANSIM/config/gnb.yaml
+    depends_on:
+      - amf
+      - smf1
+      - smf2
+      - pcf
+      - udr
+
+  ue1:
+    container_name: ue1
+    image: "ghcr.io/borjis131/ue:v3.2.7"
+    command: "-c /UERANSIM/config/ue1.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - ue1.ueransim.org
+    configs:
+      - source: ue1_config
+        target: /UERANSIM/config/ue1.yaml
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - gnb
+
+  ue2:
+    container_name: ue2
+    image: "ghcr.io/borjis131/ue:v3.2.7"
+    command: "-c /UERANSIM/config/ue2.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - ue2.ueransim.org
+    configs:
+      - source: ue2_config
+        target: /UERANSIM/config/ue2.yaml
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - gnb
+
+  prometheus:
+    container_name: prometheus
+    image: "prom/prometheus:v2.51.0"
+    networks:
+      open5gs:
+        aliases:
+          - metrics.prometheus.org
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus_data:/prometheus
+    ports:
+      - "0.0.0.0:9090:9090/tcp"
+    depends_on:
+      - amf
+      - pcf
+      - smf1
+      - smf2
+      - upf1
+      - upf2
+
+  grafana:
+    container_name: grafana
+    image: "grafana/grafana-oss:10.4.0"
+    networks:
+      open5gs:
+        aliases:
+          - dashboard.grafana.org
+    configs:
+      - source: grafana_datasource
+        target: /etc/grafana/provisioning/datasources/open5gs_prometheus.yaml
+      - source: grafana_dashboard_provider
+        target: /etc/grafana/provisioning/dashboards/open5gs_metrics.yaml
+    volumes:
+      - ../../configs/metrics/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grafana
+    ports:
+      - "0.0.0.0:3000:3000/tcp"
+    depends_on:
+      - prometheus
+
+  webui:
+    container_name: webui
+    image: "webui:${OPEN5GS_VERSION}"
+    build:
+      context: ../../images/webui
+      args:
+        - OPEN5GS_VERSION=${OPEN5GS_VERSION}
+        - NODE_VERSION=${NODE_VERSION}
+    environment:
+      - DB_URI=mongodb://db.open5gs.org/open5gs
+      - PORT=9999
+      - HOSTNAME=0.0.0.0
+      - NODE_ENV=dev
+    command: "run dev"
+    networks:
+      open5gs:
+        aliases:
+          - webui.open5gs.org
+    depends_on:
+      - db
+    ports:
+      - "0.0.0.0:9999:9999/tcp"
+
+
+networks:
+  open5gs:
+    name: open5gs
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-ogs
+    ipam:
+      config:
+        - subnet: 10.33.33.0/24
+
+volumes:
+  db_data:
+    name: open5gs_db_data
+  db_config:
+    name: open5gs_db_config
+  prometheus_data:
+    name: open5gs_prometheus_data
+
+configs:
+  nrf_config:
+    file: ../../configs/network-slicing/nrf.yaml
+  ausf_config:
+    file: ../../configs/network-slicing/ausf.yaml
+  udm_config:
+    file: ../../configs/network-slicing/udm.yaml
+  udr_config:
+    file: ../../configs/network-slicing/udr.yaml
+  nssf_config:
+    file: ../../configs/network-slicing/nssf.yaml
+  bsf_config:
+    file: ../../configs/network-slicing/bsf.yaml
+  pcf_config:
+    file: ../../configs/network-slicing/pcf.yaml
+  amf_config:
+    file: ../../configs/network-slicing/amf.yaml
+  smf1_config:
+    file: ../../configs/network-slicing/smf1.yaml
+  smf2_config:
+    file: ../../configs/network-slicing/smf2.yaml
+  upf1_config:
+    file: ../../configs/network-slicing/upf1.yaml
+  upf2_config:
+    file: ../../configs/network-slicing/upf2.yaml
+  gnb_config:
+    file: ../../configs/network-slicing/gnb.yaml
+  ue1_config:
+    file: ../../configs/network-slicing/ue1.yaml
+  ue2_config:
+    file: ../../configs/network-slicing/ue2.yaml
+  prometheus_config:
+    file: ../../configs/metrics/prometheus.yml
+  grafana_datasource:
+    file: ../../configs/metrics/grafana/datasource.yaml
+  grafana_dashboard_provider:
+    file: ../../configs/metrics/grafana/dashboard_provider.yaml
