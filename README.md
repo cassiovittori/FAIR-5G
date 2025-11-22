@@ -2,19 +2,30 @@
 
 ## Dependencies
 docker
+
 make
+
 Ubuntu 22.04 - jammy
 
 ## Step by step
 
-1. Clone repository
-2. cd to directory
+1. Clone o repositorio
+2. cd para o diretorio
 3. `make`
 4. `docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file=.env up -d`
-5. To shut down container you run: `docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file=.env down`
+5. Para desligar os containers: `docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file=.env down`
+
+6. Depois voce precisa adicionar os UEs como subscribers, segue o addsub_ue.txt executando:
+   `docker exec -it db mongosh`
+   `use open5gs`
+   E dentro do open5gs voce copia individualmente cada UE (cada UE termina em:
+   `"schema_version": 1,
+  "__v": 0
+  })`
 
 
 ## TODO
 
 1. Fix webui image
 2. Add Grafana access here
+3. Automate add subscribers step
