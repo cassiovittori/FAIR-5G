@@ -26,6 +26,6 @@ Ubuntu 22.04 - jammy
 
 ## TODO
 
-1. Fix webui image
+1. Add choices for user when using container net
 2. Add Grafana access here
 3. Automate add subscribers step
