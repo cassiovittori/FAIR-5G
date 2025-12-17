@@ -205,40 +205,6 @@ services:
       - pcf
       - udr
 
-  ue1:
-    container_name: ue1
-    image: "ghcr.io/borjis131/ue:v3.2.7"
-    command: "-c /UERANSIM/config/ue1.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - ue1.ueransim.org
-    configs:
-      - source: ue1_config
-        target: /UERANSIM/config/ue1.yaml
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-    depends_on:
-      - gnb
-
-  ue2:
-    container_name: ue2
-    image: "ghcr.io/borjis131/ue:v3.2.7"
-    command: "-c /UERANSIM/config/ue2.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - ue2.ueransim.org
-    configs:
-      - source: ue2_config
-        target: /UERANSIM/config/ue2.yaml
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-    depends_on:
-      - gnb
-
   prometheus:
     container_name: prometheus
     image: "prom/prometheus:v2.51.0"
@@ -352,10 +318,6 @@ configs:
     file: ../../configs/network-slicing/upf2.yaml
   gnb_config:
     file: ../../configs/network-slicing/gnb.yaml
-  ue1_config:
-    file: ../../configs/network-slicing/ue1.yaml
-  ue2_config:
-    file: ../../configs/network-slicing/ue2.yaml
   prometheus_config:
     file: ../../configs/network-slicing/prometheus.yml
   grafana_datasource:
