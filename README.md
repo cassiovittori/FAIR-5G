@@ -23,7 +23,9 @@ Ubuntu 22.04 - jammy
   "__v": 0
   })`
 
-7. Para subir a topologia SDN linkada ao nosso Simulador 5G basta apenas ir para o diretório do containernet e rodar o script com: `sudo python3 auto_sdn.py`
+7. Antes de subir a topologia SDN instale o ansible sudo apt-get `install ansible` e apontando para o diretorio do containernet `sudo ansible-playbook -i "localhost," -c local ansible/install.yml`
+
+7. E apontando para o diretorio container rodar o script com: `sudo python3 auto_sdn.py`
 
 
 ## TODO
