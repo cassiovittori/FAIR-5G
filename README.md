@@ -23,6 +23,8 @@ Ubuntu 22.04 - jammy
   "__v": 0
   })`
 
+7. Para subir a topologia SDN linkada ao nosso Simulador 5G basta apenas ir para o diretório do containernet e rodar o script com: `sudo python3 auto_sdn.py`
+
 
 ## TODO
 
