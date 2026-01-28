@@ -1,35 +1,36 @@
-# open5gs-mininet
+# FAIR-5G (V0) — Open5GS + ONOS + Containernet (UERANSIM UEs)
 
-## Dependencies
-docker
+Este repositório fornece um **ambiente de testes 5G + SDN** executável em **uma única máquina Ubuntu 22.04**, com foco em praticidade (subir infra sem minúcias).
 
-make
+## O que o V0 sobe
+- **Open5GS (5G Core)** via `docker compose`
+- **UERANSIM gNB** (container) via compose
+- **Grafana/Prometheus** (se presentes no compose)
+- **ONOS** (controller SDN) via container Docker
+- **Containernet/Mininet** com 1 switch (OVS OpenFlow13) e 2 UEs (containers UERANSIM)
+- Integração SDN ↔ rede docker `open5gs` via veth + bridge (`br-ogs`)
 
-Ubuntu 22.04 - jammy
+> O script gera configs runtime para o UE automaticamente, detectando o IP do `gnb` e ajustando `gnbSearchList`.
 
-## Step by step
+---
 
-1. Clone o repositorio
-2. cd para o diretorio
-3. `make`
-4. `docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file=.env up -d`
-5. Para desligar os containers: `docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file=.env down`
+## Requisitos (Ubuntu 22.04)
+- Docker + Docker Compose plugin
+- Python 3
+- Dependências do Containernet/Mininet instaladas (via playbook/installer do repo)
+- Pacotes Python do sistema:
+  - `python3-docker`
+  - `python3-iptables` (para cleanup)
 
-6. Depois voce precisa adicionar os UEs como subscribers, segue o addsub_ue.txt executando:
-   `docker exec -it db mongosh`
-   `use open5gs`
-   E dentro do open5gs voce copia individualmente cada UE (cada UE termina em:
-   `"schema_version": 1,
-  "__v": 0
-  })`
+### Observação
+Recomendamos executar tudo em VM dedicada (VMware/VirtualBox), pois envolve bridge/iptables/veth.
 
-7. Antes de subir a topologia SDN instale o ansible sudo apt-get `install ansible` e apontando para o diretorio do containernet `sudo ansible-playbook -i "localhost," -c local ansible/install.yml`
+---
 
-7. E apontando para o diretorio container rodar o script com: `sudo python3 auto_sdn.py`
+## Como executar (V0)
+Na raiz do repositório:
 
-
-## TODO
-
-1. Add choices for user when using container net
-2. Add Grafana access here
-3. Automate add subscribers step
+### 1) Subir ambiente (um comando)
+```bash
+chmod +x scripts/*.sh
+./scripts/up_v0.sh
