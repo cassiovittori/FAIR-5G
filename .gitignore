@@ -1,0 +1,25 @@
+# env / secrets
+.env
+*.env
+
+# runtime generated
+configs/runtime/
+runs/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# editor/OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# logs
+*.log
+
+# OpenFlow (repo/build interno - não versionar)
+openflow/

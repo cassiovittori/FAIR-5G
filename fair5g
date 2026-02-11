@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  cat <<EOF
+Uso:
+  ./fair5g bootstrap   # instala prereqs no Ubuntu 22.04
+  ./fair5g up          # sobe Open5GS + ONOS + Containernet
+  ./fair5g down        # derruba Open5GS e limpa mininet
+  ./fair5g status      # mostra status containers e rede open5gs
+  ./fair5g logs <svc>  # logs do compose (ex: gnb, amf, smf1, upf1...)
+
+EOF
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  bootstrap)
+    cd "$REPO_ROOT"
+    ./scripts/bootstrap_ubuntu.sh
+    ;;
+  up)
+    cd "$REPO_ROOT"
+    ./scripts/up_v0.sh
+    ;;
+  down)
+    cd "$REPO_ROOT"
+    ./scripts/down_v0.sh
+    ;;
+  status)
+    cd "$REPO_ROOT"
+    echo "[status] docker ps:"
+    sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    echo
+    echo "[status] compose ps (network-slicing):"
+    (cd compose-files/network-slicing && sudo docker compose ps) || true
+    echo
+    echo "[status] docker network open5gs:"
+    sudo docker network ls | grep -E "open5gs" || true
+    ;;
+  logs)
+    svc="${2:-}"
+    if [[ -z "$svc" ]]; then usage; exit 1; fi
+    cd "$REPO_ROOT/compose-files/network-slicing"
+    sudo docker compose logs --tail=200 "$svc"
+    ;;
+  *)
+    usage
+    exit 0
+    ;;
+esac
