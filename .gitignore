@@ -23,3 +23,7 @@ venv/
 
 # OpenFlow (repo/build interno - não versionar)
 openflow/
+
+# vendor/build dir
+openflow/
+
