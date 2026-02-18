@@ -240,7 +240,7 @@ services:
       - source: grafana_dashboard_provider
         target: /etc/grafana/provisioning/dashboards/open5gs_metrics.yaml
     volumes:
-      - ../../configs/metrics/grafana/dashboards:/var/lib/grafana/dashboards
+      - ../../configs/network-slicing/grafana/dashboards:/var/lib/grafana/dashboards
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=grafana

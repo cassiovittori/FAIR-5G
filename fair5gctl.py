@@ -8,6 +8,130 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+def is_interactive_tty() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+def show_banner():
+    # tenta usar rich + pyfiglet; se não tiver, cai pra print simples
+    title = "FAIR-5G"
+    try:
+        import pyfiglet
+        banner = pyfiglet.figlet_format(title, font="slant")
+    except Exception:
+        banner = f"=== {title} ==="
+
+    try:
+        from rich.console import Console
+        console = Console()
+        console.print(f"[bold cyan]{banner}[/bold cyan]")
+        console.print("[dim]FAIR5G: Open5GS + Slicing + SDN + Metrics[/dim]\n")
+    except Exception:
+        print(banner)
+        print("FAIR5G: Open5GS + Slicing + SDN + Metrics\n")
+
+def _menu_select(title: str, choices: list[str]) -> str:
+    """
+    Menu com setas/enter se tiver questionary.
+    Fallback: prompt numérico simples.
+    """
+    try:
+        import questionary
+        ans = questionary.select(title, choices=choices).ask()
+        if ans is None:
+            raise KeyboardInterrupt()
+        return ans
+    except Exception:
+        print(title)
+        for i, c in enumerate(choices, 1):
+            print(f"  {i}) {c}")
+        while True:
+            raw = input("Escolha um número: ").strip()
+            if raw.isdigit() and 1 <= int(raw) <= len(choices):
+                return choices[int(raw) - 1]
+
+def _menu_text(prompt: str, default: str = "") -> str:
+    try:
+        import questionary
+        ans = questionary.text(prompt, default=default).ask()
+        if ans is None:
+            raise KeyboardInterrupt()
+        return ans.strip()
+    except Exception:
+        raw = input(f"{prompt} ").strip()
+        return raw or default
+
+def maybe_run_interactive_menu():
+    """
+    Se rodar sem args em TTY (ou com --menu), mostra banner + menu e injeta sys.argv.
+    Em CI/CD (sem TTY), não abre menu: exige args.
+    """
+    force_menu = "--menu" in sys.argv
+    if force_menu:
+        sys.argv.remove("--menu")
+
+    # sem subcomando
+    no_cmd = len(sys.argv) <= 1
+    if not (force_menu or no_cmd):
+        return
+
+    if not is_interactive_tty():
+        # não interativo: não tenta abrir menu
+        return
+
+    show_banner()
+
+    choice = _menu_select(
+        "Selecione uma opção:",
+        [
+            "up (subir ambiente)",
+            "down (derrubar ambiente)",
+            "status (ver status)",
+            "logs (ver logs de um serviço)",
+            "render (renderizar UE runtime)",
+            "bootstrap (instalar dependências)",
+            "sair",
+        ],
+    )
+
+    if choice.startswith("up"):
+        # injeta comando
+        sys.argv = [sys.argv[0], "up"]
+        # opcional: perguntar config-dir
+        cfg = _menu_text("Config dir (ENTER para padrão):", default="")
+        if cfg:
+            sys.argv += ["--config-dir", cfg]
+        return
+
+    if choice.startswith("down"):
+        sys.argv = [sys.argv[0], "down"]
+        wipe = _menu_select("Wipe volumes?", ["não", "sim"])
+        if wipe == "sim":
+            sys.argv.append("--wipe")
+        keep = _menu_select("Manter ONOS container?", ["não", "sim"])
+        if keep == "sim":
+            sys.argv.append("--keep-onos")
+        return
+
+    if choice.startswith("status"):
+        sys.argv = [sys.argv[0], "status"]
+        return
+
+    if choice.startswith("logs"):
+        svc = _menu_text("Serviço (ex: amf, smf1, upf1, gnb):", default="amf")
+        sys.argv = [sys.argv[0], "logs", svc]
+        return
+
+    if choice.startswith("render"):
+        sys.argv = [sys.argv[0], "render"]
+        return
+
+    if choice.startswith("bootstrap"):
+        sys.argv = [sys.argv[0], "bootstrap"]
+        return
+
+    raise SystemExit(0)
+
+
 def run_simple(cmd, cwd=None, env=None):
     """Executa comando herdando o TTY (stdout/stderr direto no terminal)."""
     print(f"[cmd] {cmd}")
@@ -63,6 +187,7 @@ def runs_dir(run_id: str) -> Path:
     return REPO_ROOT / "runs" / run_id
 
 def main():
+    maybe_run_interactive_menu()
     parser = argparse.ArgumentParser(prog="fair5gctl", add_help=True)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
