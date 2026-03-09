@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import importlib
+import logging
+import time
 import argparse
 import os
 import subprocess
@@ -12,7 +15,6 @@ def is_interactive_tty() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 def show_banner():
-    # tenta usar rich + pyfiglet; se não tiver, cai pra print simples
     title = "FAIR-5G"
     try:
         import pyfiglet
@@ -30,10 +32,6 @@ def show_banner():
         print("FAIR5G: Open5GS + Slicing + SDN + Metrics\n")
 
 def _menu_select(title: str, choices: list[str]) -> str:
-    """
-    Menu com setas/enter se tiver questionary.
-    Fallback: prompt numérico simples.
-    """
     try:
         import questionary
         ans = questionary.select(title, choices=choices).ask()
@@ -61,21 +59,15 @@ def _menu_text(prompt: str, default: str = "") -> str:
         return raw or default
 
 def maybe_run_interactive_menu():
-    """
-    Se rodar sem args em TTY (ou com --menu), mostra banner + menu e injeta sys.argv.
-    Em CI/CD (sem TTY), não abre menu: exige args.
-    """
     force_menu = "--menu" in sys.argv
     if force_menu:
         sys.argv.remove("--menu")
 
-    # sem subcomando
     no_cmd = len(sys.argv) <= 1
     if not (force_menu or no_cmd):
         return
 
     if not is_interactive_tty():
-        # não interativo: não tenta abrir menu
         return
 
     show_banner()
@@ -89,14 +81,13 @@ def maybe_run_interactive_menu():
             "logs (ver logs de um serviço)",
             "render (renderizar UE runtime)",
             "bootstrap (instalar dependências)",
+            "metrics (monitoramento e métricas)",
             "sair",
         ],
     )
 
     if choice.startswith("up"):
-        # injeta comando
         sys.argv = [sys.argv[0], "up"]
-        # opcional: perguntar config-dir
         cfg = _menu_text("Config dir (ENTER para padrão):", default="")
         if cfg:
             sys.argv += ["--config-dir", cfg]
@@ -129,11 +120,24 @@ def maybe_run_interactive_menu():
         sys.argv = [sys.argv[0], "bootstrap"]
         return
 
+    if choice.startswith("metrics"):
+        # Importa e delega ao submenu de métricas
+        # Não injeta sys.argv — executa direto e encerra
+        try:
+            from metrics import menu_metrics
+        except ImportError:
+            # Tenta carregar do diretório do projeto
+            sys.path.insert(0, str(REPO_ROOT))
+            from metrics import menu_metrics
+
+        runs_dir = REPO_ROOT / "runs"
+        menu_metrics(runs_dir)
+        raise SystemExit(0)
+
     raise SystemExit(0)
 
 
 def run_simple(cmd, cwd=None, env=None):
-    """Executa comando herdando o TTY (stdout/stderr direto no terminal)."""
     print(f"[cmd] {cmd}")
     rc = subprocess.call(
         cmd,
@@ -145,7 +149,6 @@ def run_simple(cmd, cwd=None, env=None):
         raise SystemExit(rc)
 
 def run_capture(cmd, cwd=None, env=None):
-    """Executa comando e captura saída (não interativo)."""
     print(f"[cmd] {cmd}")
     p = subprocess.run(
         cmd,
@@ -158,17 +161,11 @@ def run_capture(cmd, cwd=None, env=None):
         raise SystemExit(p.returncode)
 
 def run_interactive_logged(cmd, log_path: Path, cwd=None, env=None):
-    """
-    Executa comando interativo em pseudo-TTY e grava tudo em log usando `script`.
-    Isso evita a saída 'bugada' do Mininet/Containernet.
-    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if subprocess.call("command -v script >/dev/null 2>&1", shell=True) != 0:
         print("[ERRO] comando 'script' não encontrado. Instale: sudo apt-get install -y util-linux")
         raise SystemExit(1)
 
-    # `script` cria um TTY real e salva tudo no arquivo.
-    # -q: quiet, -f: flush, -c: comando
     script_cmd = f"script -q -f {str(log_path)} -c {repr(cmd)}"
     print(f"[cmd] {script_cmd}")
     rc = subprocess.call(
@@ -195,16 +192,28 @@ def main():
     sub.add_parser("render", help="Renderiza configs runtime do UE (gnbSearchList)")
 
     p_up = sub.add_parser("up", help="Sobe Open5GS + ONOS + Containernet")
-    p_up.add_argument("--run-id", default=None, help="ID da execução (default: timestamp)")
-    p_up.add_argument("--config-dir", default=None, help="Override FAIR5G_CONFIG_DIR")
+    p_up.add_argument("--run-id", default=None)
+    p_up.add_argument("--config-dir", default=None)
 
     p_down = sub.add_parser("down", help="Derruba Open5GS e limpa mininet/containernet")
-    p_down.add_argument("--wipe", action="store_true", help="Remove volumes do compose (FAIR5G_WIPE=1)")
-    p_down.add_argument("--keep-onos", action="store_true", help="Mantém onos-controller (FAIR5G_KEEP_ONOS=1)")
+    p_down.add_argument("--wipe", action="store_true")
+    p_down.add_argument("--keep-onos", action="store_true")
 
     sub.add_parser("status", help="Mostra status")
+
     p_logs = sub.add_parser("logs", help="Logs do compose")
-    p_logs.add_argument("svc", help="Serviço do compose (ex: gnb, amf, smf1...)")
+    p_logs.add_argument("svc")
+
+    # subcomando metrics também disponível via CLI direta
+    p_metrics = sub.add_parser("metrics", help="Monitoramento e métricas")
+    p_metrics.add_argument(
+        "action",
+        choices=["snapshot", "watch", "report", "grafana"],
+        nargs="?",
+        default=None,
+    )
+    p_metrics.add_argument("--run-id", default=None, help="Run ID para o relatório")
+    p_metrics.add_argument("--interval", type=int, default=5, help="Intervalo do watch em segundos")
 
     args = parser.parse_args()
 
@@ -220,13 +229,10 @@ def main():
         run_id = args.run_id or new_run_id()
         out = runs_dir(run_id)
         out.mkdir(parents=True, exist_ok=True)
-
         env = os.environ.copy()
         if args.config_dir:
             env["FAIR5G_CONFIG_DIR"] = args.config_dir
-
         log_file = out / "up.log"
-        # up é interativo (entra no containernet CLI) → precisa de TTY real
         run_simple("sudo -v")
         run_interactive_logged("./scripts/up_v0.sh", log_file, cwd=REPO_ROOT, env=env)
         print(f"[ok] run_id={run_id} logs={log_file}")
@@ -249,6 +255,30 @@ def main():
 
     if args.cmd == "logs":
         run_simple(f"(cd compose-files/network-slicing && sudo docker compose logs --tail=200 {args.svc})", cwd=REPO_ROOT)
+        return
+
+    if args.cmd == "metrics":
+        try:
+            from metrics import cmd_snapshot, cmd_watch, cmd_report, cmd_open_grafana, menu_metrics
+        except ImportError:
+            sys.path.insert(0, str(REPO_ROOT))
+            from metrics import cmd_snapshot, cmd_watch, cmd_report, cmd_open_grafana, menu_metrics
+
+        _runs_dir = REPO_ROOT / "runs"
+        action = args.action
+
+        if action is None:
+            # sem subação — abre submenu interativo
+            menu_metrics(_runs_dir)
+        elif action == "snapshot":
+            cmd_snapshot()
+        elif action == "watch":
+            cmd_watch(interval=args.interval)
+        elif action == "report":
+            run_id = args.run_id or new_run_id()
+            cmd_report(run_id, _runs_dir)
+        elif action == "grafana":
+            cmd_open_grafana()
         return
 
 if __name__ == "__main__":

@@ -1,0 +1,518 @@
+{
+  "title": "Latencia e Jitter — UE1 vs UE2",
+  "uid": "latencia-jitter-ue1-ue2",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "tags": ["5g", "open5gs", "blackbox", "latencia"],
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "label": "IP UE1",
+        "name": "target_ue1",
+        "options": [
+          { "selected": true, "text": "10.33.33.200", "value": "10.33.33.200" }
+        ],
+        "current": { "text": "10.33.33.200", "value": "10.33.33.200" },
+        "query": "10.33.33.200",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "hide": 0,
+        "label": "IP UE2",
+        "name": "target_ue2",
+        "options": [
+          { "selected": true, "text": "10.33.33.201", "value": "10.33.33.201" }
+        ],
+        "current": { "text": "10.33.33.201", "value": "10.33.33.201" },
+        "query": "10.33.33.201",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Status de Conectividade",
+      "type": "row"
+    },
+
+    {
+      "title": "Probe Status — UE1 ($target_ue1)",
+      "type": "stat",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}",
+          "legendFormat": "UE1",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "0": { "color": "red",   "index": 0, "text": "FALHOU" },
+                "1": { "color": "green", "index": 1, "text": "OK" }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+
+    {
+      "title": "Probe Status — UE2 ($target_ue2)",
+      "type": "stat",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}",
+          "legendFormat": "UE2",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "0": { "color": "red",   "index": 0, "text": "FALHOU" },
+                "1": { "color": "green", "index": 1, "text": "OK" }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 10,
+      "title": "Latencia",
+      "type": "row"
+    },
+
+    {
+      "title": "Latencia (ms) — UE1 ($target_ue1)",
+      "type": "timeseries",
+      "id": 11,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"} * 1000",
+          "legendFormat": "UE1 — Latencia Total",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"} * 1000",
+          "legendFormat": "UE1 — RTT ICMP",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 300,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red",    "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "title": "Latencia (ms) — UE2 ($target_ue2)",
+      "type": "timeseries",
+      "id": 12,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"} * 1000",
+          "legendFormat": "UE2 — Latencia Total",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"} * 1000",
+          "legendFormat": "UE2 — RTT ICMP",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 300,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red",    "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "title": "Comparacao de Latencia — UE1 vs UE2",
+      "type": "timeseries",
+      "id": 13,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"} * 1000",
+          "legendFormat": "UE1 ($target_ue1)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"} * 1000",
+          "legendFormat": "UE2 ($target_ue2)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 300,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red",    "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 20,
+      "title": "Jitter (Desvio Padrao de Latencia)",
+      "type": "row"
+    },
+
+    {
+      "title": "Jitter — UE1 vs UE2 (janela 30s)",
+      "type": "timeseries",
+      "id": 21,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[30s]) * 1000",
+          "legendFormat": "UE1 ($target_ue1) — Jitter",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[30s]) * 1000",
+          "legendFormat": "UE2 ($target_ue2) — Jitter",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 50,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red",    "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "title": "Jitter — UE1 ($target_ue1)",
+      "type": "timeseries",
+      "id": 22,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[30s]) * 1000",
+          "legendFormat": "Jitter 30s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[2m]) * 1000",
+          "legendFormat": "Jitter 2m (suavizado)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 50,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red",    "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+
+    {
+      "title": "Jitter — UE2 ($target_ue2)",
+      "type": "timeseries",
+      "id": 23,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[30s]) * 1000",
+          "legendFormat": "Jitter 30s",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "editorMode": "code",
+          "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[2m]) * 1000",
+          "legendFormat": "Jitter 2m (suavizado)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "softMax": 50,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red",    "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+
+  ]
+}

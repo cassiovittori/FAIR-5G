@@ -18,6 +18,10 @@ smf:
     client:
       upf:
         - address: upf1.open5gs.org
+  metrics:
+    server:
+      - address: smf1.open5gs.org
+        port: 9090
   gtpu:
     server:
       - address: smf1.open5gs.org

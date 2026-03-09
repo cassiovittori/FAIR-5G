@@ -226,6 +226,23 @@ services:
       - smf2
       - upf1
       - upf2
+      
+  blackbox:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox
+    ports:
+      - "9115:9115"
+    networks:
+      open5gs:
+        aliases:
+          - blackbox.open5gs.org
+    restart: always
+    cap_add:
+      - NET_RAW
+    configs:
+      - source: blackbox_config
+        target: /etc/blackbox/blackbox.yml
+    command: --config.file=/etc/blackbox/blackbox.yml
 
   grafana:
     container_name: grafana
@@ -324,3 +341,5 @@ configs:
     file: ../../configs/network-slicing/grafana/datasource.yaml
   grafana_dashboard_provider:
     file: ../../configs/network-slicing/grafana/dashboard_provider.yaml
+  blackbox_config:
+    file: ../../configs/network-slicing/blackbox.yml
