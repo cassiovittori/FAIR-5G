@@ -89,6 +89,18 @@ else
   log "Playbook $REPO_ROOT/containernet/ansible/install.yml não encontrado. Pulando."
 fi
 
+# --- Dependências Python do FAIR-5G (metrics.py) ---
+log "Instalando dependências Python do FAIR-5G..."
+PIP_PACKAGES="rich pyfiglet requests questionary"
+
+if pip3 install --help 2>&1 | grep -q 'break-system-packages'; then
+  pip3 install $PIP_PACKAGES --break-system-packages
+else
+  pip3 install $PIP_PACKAGES --user
+fi
+log "Validando dependências Python..."
+python3 -c "import rich, pyfiglet, requests, questionary; print('Python FAIR-5G deps OK')" || \
+  echo "[!] Alguma dependência Python não foi instalada corretamente."
 
 log "Validando versões instaladas..."
 sudo docker --version || true
