@@ -82,6 +82,7 @@ def maybe_run_interactive_menu():
             "render (renderizar UE runtime)",
             "bootstrap (instalar dependências)",
             "metrics (monitoramento e métricas)",
+            "tutorial (modo educacional guiado)",  # ← NOVO
             "sair",
         ],
     )
@@ -121,18 +122,20 @@ def maybe_run_interactive_menu():
         return
 
     if choice.startswith("metrics"):
-        # Importa e delega ao submenu de métricas
-        # Não injeta sys.argv — executa direto e encerra
         try:
             from metrics import menu_metrics
         except ImportError:
-            # Tenta carregar do diretório do projeto
             sys.path.insert(0, str(REPO_ROOT))
             from metrics import menu_metrics
 
         runs_dir = REPO_ROOT / "runs"
         menu_metrics(runs_dir)
         raise SystemExit(0)
+
+    # ── NOVO: tutorial ────────────────────────────────────────────────────
+    if choice.startswith("tutorial"):
+        sys.argv = [sys.argv[0], "tutorial"]
+        return
 
     raise SystemExit(0)
 
@@ -204,7 +207,6 @@ def main():
     p_logs = sub.add_parser("logs", help="Logs do compose")
     p_logs.add_argument("svc")
 
-    # subcomando metrics também disponível via CLI direta
     p_metrics = sub.add_parser("metrics", help="Monitoramento e métricas")
     p_metrics.add_argument(
         "action",
@@ -214,6 +216,18 @@ def main():
     )
     p_metrics.add_argument("--run-id", default=None, help="Run ID para o relatório")
     p_metrics.add_argument("--interval", type=int, default=5, help="Intervalo do watch em segundos")
+
+    # ── NOVO: subcomando tutorial ─────────────────────────────────────────
+    p_tutorial = sub.add_parser(
+        "tutorial",
+        help="Modo educacional: executa baseline passo a passo com interface web"
+    )
+    p_tutorial.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Não abre o browser automaticamente (útil em ambientes headless)"
+    )
+    # ─────────────────────────────────────────────────────────────────────
 
     args = parser.parse_args()
 
@@ -268,7 +282,6 @@ def main():
         action = args.action
 
         if action is None:
-            # sem subação — abre submenu interativo
             menu_metrics(_runs_dir)
         elif action == "snapshot":
             cmd_snapshot()
@@ -280,6 +293,20 @@ def main():
         elif action == "grafana":
             cmd_open_grafana()
         return
+
+    if args.cmd == "tutorial":
+        try:
+            sys.path.insert(0, str(REPO_ROOT))
+            from tutorial import run_tutorial_mode
+        except ImportError as e:
+            print(f"[ERRO] Não foi possível importar tutorial.py: {e}")
+            print("       Verifique se o arquivo tutorial.py está na raiz do repositório.")
+            raise SystemExit(1)
+
+        open_browser = not args.no_browser
+        run_tutorial_mode(open_browser=open_browser)
+        return
+    # ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     main()
