@@ -40,10 +40,7 @@ except ImportError:
 # ── configuração padrão ───────────────────────────────────────────────────────
 PROMETHEUS_URL  = os.environ.get("PROMETHEUS_URL",  "http://localhost:9090")
 GRAFANA_URL     = os.environ.get("GRAFANA_URL",     "http://localhost:3000")
-GRAFANA_DASHBOARD = os.environ.get(
-    "GRAFANA_DASHBOARD",
-    "/d/open5gs-slice-monitor/open5gs-monitoramento-de-isolamento-de-slices"
-)
+GRAFANA_DASHBOARD = os.environ.get("GRAFANA_DASHBOARD", "")
 
 UE1_IP = os.environ.get("UE1_IP", "10.33.33.200")
 UE2_IP = os.environ.get("UE2_IP", "10.33.33.201")

@@ -5,18 +5,29 @@
   "schemaVersion": 39,
   "version": 1,
   "refresh": "10s",
-  "time": { "from": "now-15m", "to": "now" },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "graphTooltip": 1,
-  "tags": ["5g", "open5gs", "network-slicing", "load-test"],
+  "tags": [
+    "5g",
+    "open5gs",
+    "network-slicing",
+    "load-test"
+  ],
   "links": [
     {
       "asDropdown": true,
       "icon": "external link",
       "includeVars": true,
       "keepTime": true,
-      "tags": ["5g", "open5gs"],
+      "tags": [
+        "5g",
+        "open5gs"
+      ],
       "targetBlank": false,
       "title": "Dashboards NFs",
       "tooltip": "Abrir dashboards individuais dos NFs",
@@ -28,7 +39,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -37,12 +51,14 @@
       }
     ]
   },
-
   "templating": {
     "list": [
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "open5gsmetrics"
+        },
         "definition": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
         "hide": 0,
         "includeAll": false,
@@ -63,7 +79,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "open5gsmetrics"
+        },
         "definition": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
         "hide": 0,
         "includeAll": false,
@@ -84,184 +103,455 @@
       }
     ]
   },
-
   "panels": [
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "title": "Status Geral",
       "type": "row"
     },
-
     {
       "title": "Probe — UE1 ($target_ue1)",
       "type": "stat",
       "id": 2,
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}",
-        "legendFormat": "UE1",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}",
+          "legendFormat": "UE1",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [{ "options": { "0": { "color": "red", "index": 0, "text": "FALHOU" }, "1": { "color": "green", "index": 1, "text": "OK" } }, "type": "value" }],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FALHOU"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       }
     },
-
     {
       "title": "Probe — UE2 ($target_ue2)",
       "type": "stat",
       "id": 3,
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}",
-        "legendFormat": "UE2",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}",
+          "legendFormat": "UE2",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [{ "options": { "0": { "color": "red", "index": 0, "text": "FALHOU" }, "1": { "color": "green", "index": 1, "text": "OK" } }, "type": "value" }],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FALHOU"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       }
     },
-
     {
       "title": "UEs no AMF (RAN)",
       "type": "stat",
       "id": 4,
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "ran_ue{job=\"amf\"}",
-        "legendFormat": "UEs RAN",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "ran_ue{job=\"amf\"}",
+          "legendFormat": "UEs RAN",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
           "unit": "none"
         },
         "overrides": []
       }
     },
-
     {
       "title": "UEs Ativos",
       "type": "stat",
       "id": 5,
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "ues_active",
-        "legendFormat": "UEs Ativos",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "ues_active",
+          "legendFormat": "UEs Ativos",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
           "unit": "none"
         },
         "overrides": []
       }
     },
-
     {
       "title": "Sessoes AMF",
       "type": "stat",
       "id": 6,
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "amf_session{job=\"amf\"}",
-        "legendFormat": "Sessoes AMF",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "amf_session{job=\"amf\"}",
+          "legendFormat": "Sessoes AMF",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
           "unit": "none"
         },
         "overrides": []
       }
     },
-
     {
       "title": "gNBs Conectados",
       "type": "stat",
       "id": 7,
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [{
-        "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-        "editorMode": "code",
-        "expr": "gnb{job=\"amf\"}",
-        "legendFormat": "gNBs",
-        "instant": true,
-        "refId": "A"
-      }],
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "gnb{job=\"amf\"}",
+          "legendFormat": "gNBs",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
           "unit": "none"
         },
         "overrides": []
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
       "id": 8,
       "title": "Perda de Pacotes",
       "type": "row"
     },
-
     {
       "title": "Perda de Pacotes — UE1 vs UE2 (%)",
       "type": "timeseries",
       "id": 9,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "(1 - avg_over_time(probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[30s])) * 100",
           "legendFormat": "UE1 ($target_ue1)",
@@ -269,7 +559,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "(1 - avg_over_time(probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[30s])) * 100",
           "legendFormat": "UE2 ($target_ue2)",
@@ -281,7 +574,9 @@
         "defaults": {
           "unit": "percent",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -289,44 +584,83 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "softMax": 10,
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
       "id": 10,
       "title": "Latencia",
       "type": "row"
     },
-
     {
       "title": "Latencia (ms) — UE1 ($target_ue1)",
       "type": "timeseries",
       "id": 11,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"} * 1000",
           "legendFormat": "Latencia Total",
@@ -334,7 +668,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"} * 1000",
           "legendFormat": "RTT ICMP",
@@ -345,8 +682,10 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "min": 0,
-          "color": { "mode": "palette-classic" },
+          "min": 0.01,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -354,36 +693,75 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "softMax": 5,
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 2 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "Latencia (ms) — UE2 ($target_ue2)",
       "type": "timeseries",
       "id": 12,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"} * 1000",
           "legendFormat": "Latencia Total",
@@ -391,7 +769,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"} * 1000",
           "legendFormat": "RTT ICMP",
@@ -402,8 +783,10 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "min": 0,
-          "color": { "mode": "palette-classic" },
+          "min": 0.01,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -411,36 +794,75 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "softMax": 5,
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 2 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "Comparacao de Latencia — UE1 vs UE2 (ms)",
       "type": "timeseries",
       "id": 13,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"} * 1000",
           "legendFormat": "UE1 ($target_ue1)",
@@ -448,7 +870,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"} * 1000",
           "legendFormat": "UE2 ($target_ue2)",
@@ -459,8 +884,10 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "min": 0,
-          "color": { "mode": "palette-classic" },
+          "min": 0.01,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 5,
@@ -468,44 +895,87 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "softMax": 5,
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 2 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
       "id": 14,
       "title": "Jitter (Desvio Padrao de Latencia)",
       "type": "row"
     },
-
     {
       "title": "Jitter — UE1 vs UE2 (ms)",
       "type": "timeseries",
       "id": 15,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[30s]) * 1000",
           "legendFormat": "UE1 — Jitter 30s",
@@ -513,7 +983,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[2m]) * 1000",
           "legendFormat": "UE1 — Jitter 2m (suavizado)",
@@ -521,7 +994,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[30s]) * 1000",
           "legendFormat": "UE2 — Jitter 30s",
@@ -529,7 +1005,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "stddev_over_time(probe_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[2m]) * 1000",
           "legendFormat": "UE2 — Jitter 2m (suavizado)",
@@ -540,8 +1019,10 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "min": 0,
-          "color": { "mode": "palette-classic" },
+          "min": 0.01,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -549,44 +1030,87 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "softMax": 2,
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.5 },
-              { "color": "red", "value": 2 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
       "id": 16,
       "title": "Plano de Controle — AMF",
       "type": "row"
     },
-
     {
       "title": "AMF — Taxa de Registro Inicial (Req/s)",
       "type": "timeseries",
       "id": 17,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_rm_reginitreq{job=\"amf\"}[1m])",
           "legendFormat": "Tentativas",
@@ -594,7 +1118,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_rm_reginitsucc{job=\"amf\"}[1m])",
           "legendFormat": "Sucesso",
@@ -602,7 +1129,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_rm_regperiodreq{job=\"amf\"}[1m])",
           "legendFormat": "Periodico",
@@ -610,7 +1140,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_rm_regmobsucc{job=\"amf\"}[1m])",
           "legendFormat": "Mobilidade Succ",
@@ -621,7 +1154,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -629,28 +1164,63 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "AMF — Autenticacao (Req/s)",
       "type": "timeseries",
       "id": 18,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_amf_authreq{job=\"amf\"}[1m])",
           "legendFormat": "Requisicoes",
@@ -658,7 +1228,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_amf_authreject{job=\"amf\"}[1m])",
           "legendFormat": "Rejeitadas",
@@ -666,7 +1239,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_amffunction_amf_authfail{job=\"amf\"}[1m])",
           "legendFormat": "Falhas",
@@ -677,7 +1253,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -685,85 +1263,94 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Rejeitadas" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "Rejeitadas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "Falhas" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "Falhas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      }
-    },
-
-    {
-      "title": "AMF — Paging 5G (Req/s)",
-      "type": "timeseries",
-      "id": 19,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_amffunction_mm_paging5greq{job=\"amf\"}[1m])",
-          "legendFormat": "Paging Req",
-          "range": true,
-          "refId": "A"
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
         },
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_amffunction_mm_paging5gsucc{job=\"amf\"}[1m])",
-          "legendFormat": "Paging Succ",
-          "range": true,
-          "refId": "B"
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
       }
     },
-
     {
       "title": "AMF — Assinantes Registrados",
       "type": "timeseries",
       "id": 20,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_amffunction_rm_registeredsubnbr{job=\"amf\"}",
           "legendFormat": "Assinantes Registrados",
@@ -771,7 +1358,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "ran_ue{job=\"amf\"}",
           "legendFormat": "UEs RAN",
@@ -779,7 +1369,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "amf_session{job=\"amf\"}",
           "legendFormat": "Sessoes AMF",
@@ -790,7 +1383,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -798,36 +1393,74 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 57 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
       "id": 21,
       "title": "Plano de Controle — SMF (por Slice)",
       "type": "row"
     },
-
     {
       "title": "SMF — Sessoes PDU: Requisicoes vs Sucesso (por Slice)",
       "type": "timeseries",
       "id": 22,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 58 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationreq{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice1 — Req/s",
@@ -835,7 +1468,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationsucc{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice1 — Succ/s",
@@ -843,7 +1479,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationreq{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice2 — Req/s",
@@ -851,7 +1490,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationsucc{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice2 — Succ/s",
@@ -862,7 +1504,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -870,28 +1514,63 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "SMF — N4 Session Establishment (por Slice)",
       "type": "timeseries",
       "id": 23,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 58 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionestabreq{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice1 — N4 Estab Req/s",
@@ -899,7 +1578,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionestabreq{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice2 — N4 Estab Req/s",
@@ -907,7 +1589,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionreportsucc{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice1 — N4 Report Succ/s",
@@ -915,7 +1600,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionreportsucc{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
           "legendFormat": "Slice2 — N4 Report Succ/s",
@@ -926,7 +1614,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -934,28 +1624,63 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "SMF — Sessoes Ativas (por Slice)",
       "type": "timeseries",
       "id": 24,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 66 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
           "legendFormat": "Slice1 — Sessoes",
@@ -963,7 +1688,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
           "legendFormat": "Slice2 — Sessoes",
@@ -974,7 +1702,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -982,28 +1712,62 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "SMF — QoS Flows Ativos (por Slice)",
       "type": "timeseries",
       "id": 25,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 66 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 66
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
           "legendFormat": "Slice1 — QoS Flows",
@@ -1011,7 +1775,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
           "legendFormat": "Slice2 — QoS Flows",
@@ -1022,7 +1789,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1030,36 +1799,74 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 74 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
       "id": 26,
       "title": "PCF — Politicas de QoS",
       "type": "row"
     },
-
     {
       "title": "PCF — AM Policy Association (Req/s)",
       "type": "timeseries",
       "id": 27,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 75 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_pcffunction_pa_policyamassoreq{job=\"pcf\"}[1m])",
           "legendFormat": "AM Policy Req/s",
@@ -1067,7 +1874,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_pcffunction_pa_policyamassosucc{job=\"pcf\"}[1m])",
           "legendFormat": "AM Policy Succ/s",
@@ -1078,7 +1888,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -1086,28 +1898,63 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "PCF — SM Policy Association (Req/s)",
       "type": "timeseries",
       "id": 28,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 75 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_pcffunction_pa_policysmassoreq{job=\"pcf\"}[1m])",
           "legendFormat": "SM Policy Req/s",
@@ -1115,7 +1962,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "rate(fivegs_pcffunction_pa_policysmassosucc{job=\"pcf\"}[1m])",
           "legendFormat": "SM Policy Succ/s",
@@ -1123,7 +1973,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_pcffunction_pa_sessionnbr{job=\"pcf\"}",
           "legendFormat": "PCF Sessoes Ativas",
@@ -1134,7 +1987,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -1142,41 +1997,88 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "PCF Sessoes Ativas" },
-            "properties": [{ "id": "unit", "value": "none" }]
+            "matcher": {
+              "id": "byName",
+              "options": "PCF Sessoes Ativas"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 83 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
       "id": 29,
       "title": "UPF — Plano de Dados",
       "type": "row"
     },
-
     {
       "title": "UPF — Sessoes Ativas (por Slice)",
       "type": "timeseries",
       "id": 30,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 84 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
           "legendFormat": "UPF1 (Slice1) — Sessoes",
@@ -1184,7 +2086,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
           "legendFormat": "UPF2 (Slice2) — Sessoes",
@@ -1192,7 +2097,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "pfcp_sessions_active",
           "legendFormat": "PFCP Sessoes Ativas",
@@ -1203,7 +2111,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1211,28 +2121,62 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "UPF — QoS Flows Ativos (por Slice)",
       "type": "timeseries",
       "id": 31,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 84 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
           "legendFormat": "UPF1 (Slice1) — QoS Flows",
@@ -1240,7 +2184,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
           "legendFormat": "UPF2 (Slice2) — QoS Flows",
@@ -1251,7 +2198,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1259,141 +2208,74 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      }
-    },
-
-    {
-      "title": "UPF — Throughput GTP-N3 (pkts/s, por Slice)",
-      "type": "timeseries",
-      "id": 32,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 92 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_ep_n3_gtp_indatapktn3upf{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "UPF1 (Slice1) — Ingress",
-          "range": true,
-          "refId": "A"
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
         },
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_ep_n3_gtp_outdatapktn3upf{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "UPF1 (Slice1) — Egress",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_ep_n3_gtp_indatapktn3upf{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "UPF2 (Slice2) — Ingress",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(fivegs_ep_n3_gtp_outdatapktn3upf{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "UPF2 (Slice2) — Egress",
-          "range": true,
-          "refId": "D"
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "pps",
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
       }
     },
-
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 100 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
       "id": 33,
       "title": "Saude dos NFs",
       "type": "row"
     },
-
-    {
-      "title": "NFs — CPU Usage (%)",
-      "type": "timeseries",
-      "id": 34,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 101 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
-          "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=~\"amf|smf|upf|pcf\"}[1m]) * 100",
-          "legendFormat": "{{job}} ({{instance}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 6,
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      }
-    },
-
     {
       "title": "NFs — Memoria RSS (bytes)",
       "type": "timeseries",
       "id": 35,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 101 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "process_resident_memory_bytes{job=~\"amf|smf|upf|pcf\"}",
           "legendFormat": "{{job}} ({{instance}})",
@@ -1405,7 +2287,9 @@
         "defaults": {
           "unit": "bytes",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 6,
@@ -1413,28 +2297,63 @@
             "pointSize": 4,
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["last", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
-
     {
       "title": "NFs — Status (up/down)",
       "type": "stat",
       "id": 36,
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 109 },
-      "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "open5gsmetrics" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
           "editorMode": "code",
           "expr": "up{job=~\"amf|smf|upf|pcf\"}",
           "legendFormat": "{{job}} {{instance}}",
@@ -1447,20 +2366,53 @@
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
         "textMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
-            { "options": { "0": { "color": "red", "index": 0, "text": "DOWN" }, "1": { "color": "green", "index": 1, "text": "UP" } }, "type": "value" }
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
           ],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       }
     }
-
   ]
 }
