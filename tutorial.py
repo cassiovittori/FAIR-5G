@@ -228,13 +228,13 @@ const STEPS = [
 //  TOPOLOGIA — NODOS + DETALHES
 // ═══════════════════════════════════════════
 const ND = {
-  ue1:{lbl:"UE 1",    sub:"UERANSIM",      col:"#2dd4bf",x:.07,y:.28,
+  ue1:{lbl:"UE 1",    sub:"UERANSIM",      col:"#2dd4bf",x:.07,y:.18,
     tip:"UE 1 — dispositivo emulado da Fatia 1 (S-NSSAI sst=1, sd=000001)",
     det:{sub:"UERANSIM v3.2.6 · mn.ue1",
       desc:"Emula um dispositivo 5G usando UERANSIM. Conecta ao gNB via N1/N2 e estabelece sessão PDU com UPF1. IP na rede emulada 10.33.33.200; IP da sessão PDU no pool do UPF1 (10.45.x.x).",
       fields:[{k:"Container",v:"mn.ue1"},{k:"IP emulado",v:"10.33.33.200/24"},{k:"Pool PDU",v:"10.45.0.0/16 (UPF1)"},{k:"S-NSSAI",v:"sst=1, sd=000001"},{k:"Config",v:"configs/runtime/ue1.yaml"}],
       spec:"3GPP TS 23.501 §5.15 — Network Slicing"}},
-  ue2:{lbl:"UE 2",    sub:"UERANSIM",      col:"#f59e0b",x:.07,y:.72,
+  ue2:{lbl:"UE 2",    sub:"UERANSIM",      col:"#f59e0b",x:.07,y:.82,
     tip:"UE 2 — dispositivo emulado da Fatia 2 (S-NSSAI sst=1, sd=000002)",
     det:{sub:"UERANSIM v3.2.6 · mn.ue2",
       desc:"Segundo UE emulado, Fatia 2. Compartilha o gNB com UE1, mas AMF seleciona SMF2/UPF2 pelo S-NSSAI. Isolamento garante que degradação no UE1 não impacte o UE2.",
@@ -246,7 +246,7 @@ const ND = {
       desc:"Emula a estação base 5G NR. Aceita conexões dos UEs via NGAP e encaminha ao AMF. IP atribuído dinamicamente pelo Docker (ex: 10.33.33.17) — por isso o render_ue_configs.sh é necessário antes de subir os UEs.",
       fields:[{k:"Container",v:"gnb"},{k:"IP dinâmico",v:"10.33.33.17 (exemplo)"},{k:"Protocolo",v:"N1/N2 — NGAP/SCTP"},{k:"Dependência",v:"render_ue_configs.sh"}],
       spec:"3GPP TS 38.300 — NR; NG-RAN"}},
-  onos:{lbl:"ONOS",   sub:"SDN Controller",col:"#a78bfa",x:.42,y:.14,
+  onos:{lbl:"ONOS",   sub:"SDN Controller",col:"#a78bfa",x:.42,y:.35,
     tip:"ONOS — controlador SDN que programa o OVS via OpenFlow 1.3",
     det:{sub:"onosproject/onos:2.7 · onos-controller",
       desc:"Controlador SDN que programa regras de encaminhamento no OVS. A FAIR-5G ativa apps openflow e fwd via REST API. O loop de retry (até 60 tentativas a cada ~2s) é esperado — ONOS demora ~20s para inicializar completamente.",
@@ -264,37 +264,37 @@ const ND = {
       desc:"Access and Mobility Management Function: ponto de entrada do núcleo. Processa Registration Request, autentica via AUSF/UDM e seleciona a SMF correta pelo S-NSSAI do UE. Compartilhado entre fatias — o isolamento real ocorre no SMF/UPF.",
       fields:[{k:"Container",v:"amf"},{k:"NGAP",v:"porta 38412 (SCTP)"},{k:"SBI",v:"HTTP/2 porta 7777"},{k:"Startup",v:"4.7s após compose up"}],
       spec:"3GPP TS 29.518 — AMF Services"}},
-  smf1:{lbl:"SMF₁",   sub:"Slice 1",        col:"#2dd4bf",x:.74,y:.28,
+  smf1:{lbl:"SMF₁",   sub:"Slice 1",        col:"#2dd4bf",x:.74,y:.18,
     tip:"SMF₁ — gerencia sessão PDU do UE1 e configura UPF1 via PFCP",
     det:{sub:"gradiant/open5gs:v2.7.5 · container: smf1",
       desc:"Session Management Function exclusiva da Fatia 1. Estabelece sessão PDU do UE1, aloca IP do pool 10.45.0.0/16 e configura UPF1 via PFCP. Instância separada do SMF2 — falhas não se propagam entre fatias.",
       fields:[{k:"Container",v:"smf1"},{k:"PFCP",v:"porta 8805 (UDP)"},{k:"Pool IP",v:"10.45.0.0/16"},{k:"Startup",v:"7.2s após compose up"}],
       spec:"3GPP TS 29.502 — SMF Services"}},
-  upf1:{lbl:"UPF₁",   sub:"Slice 1",        col:"#2dd4bf",x:.90,y:.28,
+  upf1:{lbl:"UPF₁",   sub:"Slice 1",        col:"#2dd4bf",x:.90,y:.18,
     tip:"UPF₁ — plano de dados da Fatia 1, encaminha pacotes do UE1 via GTP-U",
     det:{sub:"gradiant/open5gs:v2.7.5 · container: upf1",
       desc:"User Plane Function da Fatia 1. Encaminha pacotes do UE1 via GTP-U. Recebe instruções do SMF1 via PFCP. Opera na sub-rede 10.45.0.0/16. No cenário de estresse, é este UPF que sofre degradação — sem afetar UPF2.",
       fields:[{k:"Container",v:"upf1"},{k:"GTP-U",v:"porta 2152 (UDP)"},{k:"Sub-rede",v:"10.45.0.0/16"},{k:"Startup",v:"2.7s após compose up"}],
       spec:"3GPP TS 29.244 — PFCP; GTP-U"}},
-  smf2:{lbl:"SMF₂",   sub:"Slice 2",        col:"#f59e0b",x:.74,y:.72,
+  smf2:{lbl:"SMF₂",   sub:"Slice 2",        col:"#f59e0b",x:.74,y:.82,
     tip:"SMF₂ — gerencia sessão PDU do UE2 e configura UPF2 via PFCP",
     det:{sub:"gradiant/open5gs:v2.7.5 · container: smf2",
       desc:"Session Management Function da Fatia 2. Configuração espelhada do SMF1, mas com pool de IPs e UPF distintos. O plano de controle da Fatia 2 é completamente independente — não apenas roteamento diferente, mas instância separada do processo.",
       fields:[{k:"Container",v:"smf2"},{k:"PFCP",v:"porta 8805 (UDP)"},{k:"Pool IP",v:"10.46.0.0/16"},{k:"Startup",v:"6.4s após compose up"}],
       spec:"3GPP TS 29.502 — SMF Services"}},
-  upf2:{lbl:"UPF₂",   sub:"Slice 2",        col:"#f59e0b",x:.90,y:.72,
+  upf2:{lbl:"UPF₂",   sub:"Slice 2",        col:"#f59e0b",x:.90,y:.82,
     tip:"UPF₂ — plano de dados da Fatia 2, encaminha pacotes do UE2 via GTP-U",
     det:{sub:"gradiant/open5gs:v2.7.5 · container: upf2",
       desc:"User Plane Function da Fatia 2. Opera na sub-rede 10.46.0.0/16. O cenário de isolamento valida que pacotes do UE1 nunca atravessam o UPF2 — o OVS garante essa separação com as flow rules do ONOS.",
       fields:[{k:"Container",v:"upf2"},{k:"GTP-U",v:"porta 2152 (UDP)"},{k:"Sub-rede",v:"10.46.0.0/16"},{k:"Startup",v:"2.1s após compose up"}],
       spec:"3GPP TS 29.244 — PFCP; GTP-U"}},
-  db:{lbl:"MongoDB",  sub:"open5gs-db",     col:"#60a5fa",x:.58,y:.17,
+  db:{lbl:"MongoDB",  sub:"open5gs-db",     col:"#60a5fa",x:.58,y:.36,
     tip:"MongoDB — banco de subscribers: IMSI, K, OPc e S-NSSAI por UE",
     det:{sub:"mongo:6.0 · container: db",
       desc:"Armazena o registro de assinantes: IMSI, K, OPc e S-NSSAI. Populado pelo seed_subscribers.sh (2 upserts). UDM consulta este banco durante autenticação. Primeiro container a subir (2.1s).",
       fields:[{k:"Container",v:"db"},{k:"Porta",v:"27017"},{k:"Volume",v:"open5gs_db_data"},{k:"Seed",v:"processed=2, upserts=2"}],
       spec:"3GPP TS 29.503 — UDM Data Model"}},
-  nrf:{lbl:"NRF",     sub:"NF Registry",    col:"#60a5fa",x:.58,y:.83,
+  nrf:{lbl:"NRF",     sub:"NF Registry",    col:"#60a5fa",x:.58,y:.64,
     tip:"NRF — catálogo de funções de rede ativas (DNS interno do núcleo 5G)",
     det:{sub:"gradiant/open5gs:v2.7.5 · container: nrf",
       desc:"Network Repository Function: catálogo de todas as VNFs ativas. AMF consulta NRF para descobrir o SMF correto para cada fatia. Segundo container a subir (2.7s) — os outros dependem dele para se registrar.",
@@ -587,13 +587,13 @@ function drawTopo(){
 
   // slice bands
   svg.selectAll(".sb").remove();
-  [[.07,.08,.38,"#2dd4bf"],[.07,.54,.38,"#f59e0b"]].forEach(([_,yf,hf,c])=>{
+  [[.07,.06,.24,"#2dd4bf"],[.07,.70,.24,"#f59e0b"]].forEach(([_,yf,hf,c])=>{
     svg.insert("rect",":first-child").attr("class","sb")
       .attr("x",0).attr("y",H*yf).attr("width",W).attr("height",H*hf)
       .attr("fill",c).attr("opacity",.025);
   });
   svg.selectAll(".sl").remove();
-  [["SLICE 1","#2dd4bf",H*.1],["SLICE 2","#f59e0b",H*.57]].forEach(([t,c,y])=>{
+  [["SLICE 1","#2dd4bf",H*.08],["SLICE 2","#f59e0b",H*.72]].forEach(([t,c,y])=>{
     svg.append("text").attr("class","sl").attr("x",8).attr("y",y).text(t)
       .attr("fill",c).attr("opacity",.2).attr("font-size",8)
       .attr("font-weight",700).attr("letter-spacing",2.5).attr("font-family","monospace");
