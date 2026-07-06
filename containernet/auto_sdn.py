@@ -4,6 +4,9 @@ import time
 import subprocess
 import json
 import sys
+import base64
+import urllib.request
+import urllib.error
 
 from mininet.net import Containernet
 from mininet.node import RemoteController, OVSKernelSwitch
@@ -13,6 +16,9 @@ from mininet.log import info, setLogLevel
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+
+_UPF1_SUBNET = "10.45.0.0/16"
+_UPF2_SUBNET = "10.46.0.0/16"
 
 
 def run(cmd: str, check: bool = True):
@@ -69,6 +75,28 @@ def get_docker_bridge_name(network_name: str = "open5gs"):
     return bridge_name
 
 
+def _onos_request(method: str, path: str, user: str, password: str, payload=None):
+    url = f"http://localhost:8181{path}"
+    creds = base64.b64encode(f"{user}:{password}".encode()).decode()
+    headers = {"Authorization": f"Basic {creds}"}
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read()
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        body = e.read()
+        print(f"[ERRO] ONOS {method} {path}: HTTP {e.code} — {body.decode()[:200]}")
+        return None
+    except urllib.error.URLError as e:
+        print(f"[ERRO] ONOS {method} {path}: {e.reason}")
+        return None
+
+
 def activate_app_rest(app_name: str, user: str, password: str):
     print(f"Ativando App via API: {app_name}")
     cmd = (
@@ -77,6 +105,12 @@ def activate_app_rest(app_name: str, user: str, password: str):
         f"-X POST http://localhost:8181/onos/v1/applications/{app_name}/active"
     )
     return run(cmd, check=False).returncode == 0
+
+
+def deactivate_app_rest(app_name: str, user: str, password: str):
+    print(f"Desativando App via API: {app_name}")
+    result = _onos_request("DELETE", f"/onos/v1/applications/{app_name}/active", user, password)
+    return result is not None
 
 
 def wait_for_onos(user: str, password: str, port: int = 8181, max_retries: int = 60):
@@ -89,6 +123,103 @@ def wait_for_onos(user: str, password: str, port: int = 8181, max_retries: int =
                 return True
         time.sleep(2)
         print(f"Tentativa {i+1}/{max_retries}")
+    return False
+
+
+def wait_for_switch(user: str, password: str, max_retries: int = 30) -> str:
+    print("Aguardando switch conectar ao ONOS...")
+    for i in range(max_retries):
+        data = _onos_request("GET", "/onos/v1/devices", user, password)
+        if data:
+            available = [d for d in data.get("devices", []) if d.get("available", False)]
+            if available:
+                dpid = available[0]["id"]
+                print(f"Switch disponível no ONOS: {dpid}")
+                return dpid
+        time.sleep(2)
+        print(f"  aguardando switch ({i+1}/{max_retries})...")
+    raise RuntimeError("Switch não conectou ao ONOS no tempo esperado")
+
+
+def get_port_by_name(user: str, password: str, dpid: str, intf_name: str):
+    data = _onos_request("GET", f"/onos/v1/devices/{dpid}/ports", user, password)
+    if not data:
+        return None
+    for port in data.get("ports", []):
+        ann = port.get("annotations", {})
+        if ann.get("portName") == intf_name or ann.get("interfaceName") == intf_name:
+            return port["port"]
+    return None
+
+
+def install_slice_flows(user: str, password: str, dpid: str,
+                        port_ue1: str, port_ue2: str, port_core: str) -> bool:
+    ue1_ip = "10.33.33.200"
+    ue2_ip = "10.33.33.201"
+
+    flows = [
+        {
+            "priority": 200, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue1_ip}/32"},
+                {"type": "IPV4_DST", "ip": _UPF2_SUBNET},
+            ]},
+            "treatment": {"instructions": [{"type": "NOACTION"}]},
+        },
+        {
+            "priority": 200, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue2_ip}/32"},
+                {"type": "IPV4_DST", "ip": _UPF1_SUBNET},
+            ]},
+            "treatment": {"instructions": [{"type": "NOACTION"}]},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue1_ip}/32"},
+            ]},
+            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_core)}]},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue2_ip}/32"},
+            ]},
+            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_core)}]},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_DST", "ip": f"{ue1_ip}/32"},
+            ]},
+            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_ue1)}]},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_DST", "ip": f"{ue2_ip}/32"},
+            ]},
+            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_ue2)}]},
+        },
+    ]
+
+    print(f"Instalando {len(flows)} flows proativos no switch {dpid}...")
+    result = _onos_request(
+        "POST", f"/onos/v1/flows/{dpid}",
+        user, password,
+        payload={"flows": flows},
+    )
+    if result is not None:
+        print("Flows de fatiamento instalados.")
+        return True
+    print("[ERRO] Falha ao instalar flows de fatiamento.")
     return False
 
 
@@ -119,14 +250,12 @@ def ensure_onos():
 
 
 def ensure_veth_and_iptables(bridge_name: str):
-    # veth
     run("ip link delete veth-sdn 2>/dev/null || true", check=False)
     run("ip link add veth-sdn type veth peer name veth-docker")
     run(f"ip link set veth-docker master {bridge_name}")
     run("ip link set veth-sdn up")
     run("ip link set veth-docker up")
 
-    # iptables: remove SOMENTE regra FAIR5G
     run(
         "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
         check=False,
@@ -182,6 +311,9 @@ def run_topology():
     bridge_name = get_docker_bridge_name("open5gs")
     ensure_veth_and_iptables(bridge_name)
 
+    user = os.getenv("FAIR5G_ONOS_USER", "onos")
+    password = os.getenv("FAIR5G_ONOS_PASS", "rocks")
+
     net = None
     try:
         print("Iniciando Topologia Mininet...")
@@ -222,13 +354,29 @@ def run_topology():
         info("*** Iniciando a Rede\n")
         net.start()
 
+        print("Configurando flows de fatiamento no SDN...")
+        dpid = wait_for_switch(user, password)
+
+        port_ue1 = get_port_by_name(user, password, dpid, "s1-eth1")
+        port_ue2 = get_port_by_name(user, password, dpid, "s1-eth2")
+        port_core = get_port_by_name(user, password, dpid, "veth-sdn")
+
+        if not all([port_ue1, port_ue2, port_core]):
+            raise RuntimeError(
+                f"Portas não encontradas no ONOS — ue1={port_ue1}, ue2={port_ue2}, core={port_core}"
+            )
+
+        install_slice_flows(user, password, dpid, port_ue1, port_ue2, port_core)
+        deactivate_app_rest("org.onosproject.fwd", user, password)
+
         print("Iniciando Conexao 5G (UERANSIM)...")
         configure_ue("ue1", "ue1.yaml")
         configure_ue("ue2", "ue2.yaml")
 
         print("\nAmbiente Pronto (Mininet)")
         print('Logs: ue1 sh -c "tail -f /tmp/ue1.log"')
-        print('Ping básico: ue1 ping -c 3 10.33.33.201\n')
+        print('Ping básico: ue1 ping -c 3 10.33.33.201')
+        print('Verificar flows: ovs-ofctl dump-flows s1\n')
 
         CLI(net)
 
@@ -247,4 +395,3 @@ if __name__ == "__main__":
         print("Execute como ROOT (sudo).")
         sys.exit(1)
     run_topology()
-
