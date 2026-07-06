@@ -211,16 +211,56 @@ def install_slice_flows(user: str, password: str, dpid: str,
     ]
 
     print(f"Instalando {len(flows)} flows proativos no switch {dpid}...")
-    result = _onos_request(
-        "POST", f"/onos/v1/flows/{dpid}",
-        user, password,
-        payload={"flows": flows},
-    )
-    if result is not None:
+    failed = 0
+    for i, flow in enumerate(flows):
+        result = _onos_request("POST", f"/onos/v1/flows/{dpid}", user, password, payload=flow)
+        if result is None:
+            print(f"[ERRO] Flow {i+1}/{len(flows)} falhou.")
+            failed += 1
+        else:
+            print(f"  flow {i+1}/{len(flows)} instalado.")
+    if failed == 0:
         print("Flows de fatiamento instalados.")
         return True
-    print("[ERRO] Falha ao instalar flows de fatiamento.")
+    print(f"[ERRO] {failed} flow(s) não foram instalados.")
     return False
+
+
+def get_container_bridge_ip(container_name: str) -> str:
+    result = run(
+        f"docker inspect -f '{{{{.NetworkSettings.Networks.bridge.IPAddress}}}}' {container_name}",
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def install_mgmt_isolation_rules(ue1_bridge_ip: str, ue2_bridge_ip: str):
+    pairs = [(ue1_bridge_ip, _UPF2_SUBNET), (ue2_bridge_ip, _UPF1_SUBNET)]
+    for src, dst in pairs:
+        if not src:
+            print(f"[AVISO] IP Docker não encontrado para container, pulando regra → {dst}")
+            continue
+        run(
+            f"while iptables-legacy -D FORWARD -s {src} -d {dst} "
+            "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
+            check=False,
+        )
+        run(
+            f"iptables-legacy -I FORWARD 1 -s {src} -d {dst} "
+            "-m comment --comment FAIR5G-SLICE-ISO-MGMT -j DROP"
+        )
+    print(f"Isolamento mgmt plane: mn.ue1={ue1_bridge_ip}, mn.ue2={ue2_bridge_ip}")
+
+
+def cleanup_mgmt_isolation_rules():
+    for cname, deny_subnet in [("mn.ue1", _UPF2_SUBNET), ("mn.ue2", _UPF1_SUBNET)]:
+        ip = get_container_bridge_ip(cname)
+        if ip:
+            run(
+                f"while iptables-legacy -D FORWARD -s {ip} -d {deny_subnet} "
+                "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
+                check=False,
+            )
 
 
 def ensure_onos():
@@ -262,6 +302,26 @@ def ensure_veth_and_iptables(bridge_name: str):
     )
     run("iptables -I DOCKER-USER 1 -m comment --comment FAIR5G -j ACCEPT", check=False)
 
+    run(
+        f"while iptables-legacy -D FORWARD -s {_UPF1_SUBNET} -d {_UPF2_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO 2>/dev/null; do :; done",
+        check=False,
+    )
+    run(
+        f"while iptables-legacy -D FORWARD -s {_UPF2_SUBNET} -d {_UPF1_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO 2>/dev/null; do :; done",
+        check=False,
+    )
+    run(
+        f"iptables-legacy -I FORWARD 1 -s {_UPF1_SUBNET} -d {_UPF2_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO -j DROP"
+    )
+    run(
+        f"iptables-legacy -I FORWARD 1 -s {_UPF2_SUBNET} -d {_UPF1_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO -j DROP"
+    )
+    print(f"Isolamento cross-slice aplicado: {_UPF1_SUBNET} ↔ {_UPF2_SUBNET}")
+
 
 def docker_exec(cname: str, cmd: str, check: bool = True):
     return run(f"docker exec {cname} sh -c {json.dumps(cmd)}", check=check)
@@ -295,6 +355,17 @@ def cleanup_host_artifacts():
         "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
         check=False,
     )
+    run(
+        f"while iptables-legacy -D FORWARD -s {_UPF1_SUBNET} -d {_UPF2_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO 2>/dev/null; do :; done",
+        check=False,
+    )
+    run(
+        f"while iptables-legacy -D FORWARD -s {_UPF2_SUBNET} -d {_UPF1_SUBNET} "
+        "-m comment --comment FAIR5G-SLICE-ISO 2>/dev/null; do :; done",
+        check=False,
+    )
+    cleanup_mgmt_isolation_rules()
     preclean_mn_containers()
 
 
@@ -368,6 +439,11 @@ def run_topology():
 
         install_slice_flows(user, password, dpid, port_ue1, port_ue2, port_core)
         deactivate_app_rest("org.onosproject.fwd", user, password)
+
+        print("Configurando isolamento mgmt plane...")
+        ue1_bridge_ip = get_container_bridge_ip("mn.ue1")
+        ue2_bridge_ip = get_container_bridge_ip("mn.ue2")
+        install_mgmt_isolation_rules(ue1_bridge_ip, ue2_bridge_ip)
 
         print("Iniciando Conexao 5G (UERANSIM)...")
         configure_ue("ue1", "ue1.yaml")
