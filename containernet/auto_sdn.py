@@ -4,6 +4,7 @@ import time
 import subprocess
 import json
 import sys
+import threading
 import base64
 import urllib.request
 import urllib.error
@@ -152,18 +153,19 @@ def get_port_by_name(user: str, password: str, dpid: str, intf_name: str):
     return None
 
 
+def _output_instrs(port, meter_id):
+    instrs = []
+    if meter_id is not None:
+        instrs.append({"type": "METER", "meterId": int(meter_id)})
+    instrs.append({"type": "OUTPUT", "port": str(port)})
+    return instrs
+
+
 def install_slice_flows(user: str, password: str, dpid: str,
                         port_ue1: str, port_ue2: str, port_core: str,
                         meter_id_ue1=None, meter_id_ue2=None) -> bool:
     ue1_ip = "10.33.33.200"
     ue2_ip = "10.33.33.201"
-
-    def output_instrs(port, meter_id):
-        instrs = []
-        if meter_id is not None:
-            instrs.append({"type": "METER", "meterId": int(meter_id)})
-        instrs.append({"type": "OUTPUT", "port": str(port)})
-        return instrs
 
     flows = [
         {
@@ -190,7 +192,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_SRC", "ip": f"{ue1_ip}/32"},
             ]},
-            "treatment": {"instructions": output_instrs(port_core, meter_id_ue1)},
+            "treatment": {"instructions": _output_instrs(port_core, meter_id_ue1)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -198,7 +200,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_SRC", "ip": f"{ue2_ip}/32"},
             ]},
-            "treatment": {"instructions": output_instrs(port_core, meter_id_ue2)},
+            "treatment": {"instructions": _output_instrs(port_core, meter_id_ue2)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -206,7 +208,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_DST", "ip": f"{ue1_ip}/32"},
             ]},
-            "treatment": {"instructions": output_instrs(port_ue1, meter_id_ue1)},
+            "treatment": {"instructions": _output_instrs(port_ue1, meter_id_ue1)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -214,7 +216,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_DST", "ip": f"{ue2_ip}/32"},
             ]},
-            "treatment": {"instructions": output_instrs(port_ue2, meter_id_ue2)},
+            "treatment": {"instructions": _output_instrs(port_ue2, meter_id_ue2)},
         },
     ]
 
@@ -275,6 +277,92 @@ def install_slice_meters(user: str, password: str, dpid: str):
     id_urllc = rate_to_id.get(specs[1]["rate"])
     print(f"Meters: eMBB={id_embb} (rate={specs[0]['rate']}), URLLC={id_urllc} (rate={specs[1]['rate']})")
     return id_embb, id_urllc
+
+
+def get_ue_tunnel_ip(container_name: str):
+    result = run(
+        f"docker exec {container_name} ip addr show uesimtun0 2>/dev/null",
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("inet "):
+            return line.split()[1].split("/")[0]
+    return None
+
+
+def remove_flows_for_ip(user: str, password: str, dpid: str, ue_ip: str):
+    data = _onos_request("GET", f"/onos/v1/flows/{dpid}", user, password)
+    if not data:
+        return
+    for flow in data.get("flows", []):
+        for c in flow.get("selector", {}).get("criteria", []):
+            if c.get("type") in ("IPV4_SRC", "IPV4_DST"):
+                if c.get("ip", "").split("/")[0] == ue_ip:
+                    flow_id = flow.get("id")
+                    if flow_id:
+                        _onos_request("DELETE", f"/onos/v1/flows/{dpid}/{flow_id}", user, password)
+                    break
+
+
+def install_ue_flows(user: str, password: str, dpid: str,
+                     ue_ip: str, deny_subnet: str, port_ue: str, port_core: str, meter_id=None):
+    flows = [
+        {
+            "priority": 200, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue_ip}/32"},
+                {"type": "IPV4_DST", "ip": deny_subnet},
+            ]},
+            "treatment": {"instructions": [{"type": "NOACTION"}]},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_SRC", "ip": f"{ue_ip}/32"},
+            ]},
+            "treatment": {"instructions": _output_instrs(port_core, meter_id)},
+        },
+        {
+            "priority": 100, "isPermanent": True,
+            "selector": {"criteria": [
+                {"type": "ETH_TYPE", "ethType": "0x0800"},
+                {"type": "IPV4_DST", "ip": f"{ue_ip}/32"},
+            ]},
+            "treatment": {"instructions": _output_instrs(port_ue, meter_id)},
+        },
+    ]
+    for flow in flows:
+        _onos_request("POST", f"/onos/v1/flows/{dpid}", user, password, payload=flow)
+    print(f"[SDN] Flows instalados para {ue_ip}")
+
+
+def ue_session_listener(user: str, password: str, dpid: str, ue_configs: dict, stop_event):
+    ue_state = {name: None for name in ue_configs}
+    while not stop_event.is_set():
+        for cname, cfg in ue_configs.items():
+            current_ip = get_ue_tunnel_ip(cname)
+            prev_ip = ue_state[cname]
+            if current_ip == prev_ip:
+                continue
+            if prev_ip is not None:
+                remove_flows_for_ip(user, password, dpid, prev_ip)
+                if current_ip is None:
+                    install_ue_flows(user, password, dpid, cfg["mn_ip"], cfg["deny_subnet"],
+                                     cfg["port_ue"], cfg["port_core"], cfg["meter_id"])
+                    print(f"[SDN] {cname}: sessão encerrada — flows estáticos restaurados ({cfg['mn_ip']})")
+            if current_ip is not None:
+                if prev_ip is None:
+                    remove_flows_for_ip(user, password, dpid, cfg["mn_ip"])
+                install_ue_flows(user, password, dpid, current_ip, cfg["deny_subnet"],
+                                 cfg["port_ue"], cfg["port_core"], cfg["meter_id"])
+                print(f"[SDN] {cname}: sessão PDU ativa — flows dinâmicos instalados ({current_ip})")
+            ue_state[cname] = current_ip
+        stop_event.wait(1)
 
 
 def get_container_bridge_ip(container_name: str) -> str:
@@ -436,6 +524,7 @@ def run_topology():
     user = os.getenv("FAIR5G_ONOS_USER", "onos")
     password = os.getenv("FAIR5G_ONOS_PASS", "rocks")
 
+    stop_event = None
     net = None
     try:
         print("Iniciando Topologia Mininet...")
@@ -501,6 +590,31 @@ def run_topology():
         configure_ue("ue1", "ue1.yaml")
         configure_ue("ue2", "ue2.yaml")
 
+        ue_configs = {
+            "mn.ue1": {
+                "mn_ip": "10.33.33.200",
+                "port_ue": port_ue1,
+                "port_core": port_core,
+                "meter_id": meter_id_ue1,
+                "deny_subnet": _UPF2_SUBNET,
+            },
+            "mn.ue2": {
+                "mn_ip": "10.33.33.201",
+                "port_ue": port_ue2,
+                "port_core": port_core,
+                "meter_id": meter_id_ue2,
+                "deny_subnet": _UPF1_SUBNET,
+            },
+        }
+        stop_event = threading.Event()
+        listener_thread = threading.Thread(
+            target=ue_session_listener,
+            args=(user, password, dpid, ue_configs, stop_event),
+            daemon=True,
+        )
+        listener_thread.start()
+        print("Listener de sessões PDU iniciado.")
+
         print("\nAmbiente Pronto (Mininet)")
         print('Logs: ue1 sh -c "tail -f /tmp/ue1.log"')
         print('Ping básico: ue1 ping -c 3 10.33.33.201')
@@ -510,6 +624,8 @@ def run_topology():
 
     finally:
         print("Limpando ambiente...")
+        if stop_event is not None:
+            stop_event.set()
         try:
             if net is not None:
                 net.stop()
