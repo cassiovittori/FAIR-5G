@@ -12,6 +12,8 @@ amf:
     client:
       nrf:
         - uri: http://nrf.open5gs.org:80
+      nssf:
+        - uri: http://nssf.open5gs.org:80
   ngap:
     server:
       - address: amf.open5gs.org
