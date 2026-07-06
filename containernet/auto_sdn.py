@@ -153,9 +153,17 @@ def get_port_by_name(user: str, password: str, dpid: str, intf_name: str):
 
 
 def install_slice_flows(user: str, password: str, dpid: str,
-                        port_ue1: str, port_ue2: str, port_core: str) -> bool:
+                        port_ue1: str, port_ue2: str, port_core: str,
+                        meter_id_ue1=None, meter_id_ue2=None) -> bool:
     ue1_ip = "10.33.33.200"
     ue2_ip = "10.33.33.201"
+
+    def output_instrs(port, meter_id):
+        instrs = []
+        if meter_id is not None:
+            instrs.append({"type": "METER", "meterId": int(meter_id)})
+        instrs.append({"type": "OUTPUT", "port": str(port)})
+        return instrs
 
     flows = [
         {
@@ -182,7 +190,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_SRC", "ip": f"{ue1_ip}/32"},
             ]},
-            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_core)}]},
+            "treatment": {"instructions": output_instrs(port_core, meter_id_ue1)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -190,7 +198,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_SRC", "ip": f"{ue2_ip}/32"},
             ]},
-            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_core)}]},
+            "treatment": {"instructions": output_instrs(port_core, meter_id_ue2)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -198,7 +206,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_DST", "ip": f"{ue1_ip}/32"},
             ]},
-            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_ue1)}]},
+            "treatment": {"instructions": output_instrs(port_ue1, meter_id_ue1)},
         },
         {
             "priority": 100, "isPermanent": True,
@@ -206,7 +214,7 @@ def install_slice_flows(user: str, password: str, dpid: str,
                 {"type": "ETH_TYPE", "ethType": "0x0800"},
                 {"type": "IPV4_DST", "ip": f"{ue2_ip}/32"},
             ]},
-            "treatment": {"instructions": [{"type": "OUTPUT", "port": str(port_ue2)}]},
+            "treatment": {"instructions": output_instrs(port_ue2, meter_id_ue2)},
         },
     ]
 
@@ -224,6 +232,49 @@ def install_slice_flows(user: str, password: str, dpid: str,
         return True
     print(f"[ERRO] {failed} flow(s) não foram instalados.")
     return False
+
+
+def install_slice_meters(user: str, password: str, dpid: str):
+    existing = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
+    if existing:
+        for m in existing.get("meters", []):
+            mid = m.get("id")
+            if mid:
+                _onos_request("DELETE", f"/onos/v1/meters/{dpid}/{mid}", user, password)
+
+    specs = [
+        {"rate": 12500, "burstSize": 10240},
+        {"rate": 1250, "burstSize": 1024},
+    ]
+    print(f"Instalando {len(specs)} meters no switch {dpid}...")
+    for i, spec in enumerate(specs):
+        payload = {
+            "deviceId": dpid,
+            "unit": "KB_PER_SEC",
+            "burst": True,
+            "bands": [{"type": "DROP", "rate": spec["rate"], "burstSize": spec["burstSize"]}],
+        }
+        result = _onos_request("POST", f"/onos/v1/meters/{dpid}", user, password, payload=payload)
+        if result is None:
+            print(f"[AVISO] POST meter {i+1} falhou.")
+
+    time.sleep(2)
+    meters_data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
+    if not meters_data:
+        print("[AVISO] Não foi possível obter IDs dos meters — flows sem QoS enforcement.")
+        return None, None
+
+    rate_to_id = {}
+    for m in meters_data.get("meters", []):
+        for band in m.get("bands", []):
+            r = band.get("rate")
+            if r in (specs[0]["rate"], specs[1]["rate"]):
+                rate_to_id[r] = m.get("id")
+
+    id_embb = rate_to_id.get(specs[0]["rate"])
+    id_urllc = rate_to_id.get(specs[1]["rate"])
+    print(f"Meters: eMBB={id_embb} (rate={specs[0]['rate']}), URLLC={id_urllc} (rate={specs[1]['rate']})")
+    return id_embb, id_urllc
 
 
 def get_container_bridge_ip(container_name: str) -> str:
@@ -437,7 +488,8 @@ def run_topology():
                 f"Portas não encontradas no ONOS — ue1={port_ue1}, ue2={port_ue2}, core={port_core}"
             )
 
-        install_slice_flows(user, password, dpid, port_ue1, port_ue2, port_core)
+        meter_id_ue1, meter_id_ue2 = install_slice_meters(user, password, dpid)
+        install_slice_flows(user, password, dpid, port_ue1, port_ue2, port_core, meter_id_ue1, meter_id_ue2)
         deactivate_app_rest("org.onosproject.fwd", user, password)
 
         print("Configurando isolamento mgmt plane...")

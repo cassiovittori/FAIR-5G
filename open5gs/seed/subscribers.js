@@ -26,8 +26,8 @@ const subs = [
               }
             },
             ambr: {
-              downlink: { value: 1, unit: 3 },
-              uplink: { value: 1, unit: 3 }
+              downlink: { value: 100, unit: 2 },
+              uplink: { value: 50, unit: 2 }
             },
             pcc_rule: []
           }
@@ -35,8 +35,8 @@ const subs = [
       }
     ],
     ambr: {
-      downlink: { value: 1, unit: 3 },
-      uplink: { value: 1, unit: 3 }
+      downlink: { value: 100, unit: 2 },
+      uplink: { value: 50, unit: 2 }
     },
     security: {
       k: "00000000000000000000000000000000",
@@ -63,7 +63,7 @@ const subs = [
             name: "internet",
             type: 3,
             qos: {
-              index: 9,
+              index: 2,
               arp: {
                 priority_level: 8,
                 pre_emption_capability: 1,
@@ -71,8 +71,8 @@ const subs = [
               }
             },
             ambr: {
-              downlink: { value: 1, unit: 3 },
-              uplink: { value: 1, unit: 3 }
+              downlink: { value: 10, unit: 2 },
+              uplink: { value: 10, unit: 2 }
             },
             pcc_rule: []
           }
@@ -80,8 +80,8 @@ const subs = [
       }
     ],
     ambr: {
-      downlink: { value: 1, unit: 3 },
-      uplink: { value: 1, unit: 3 }
+      downlink: { value: 10, unit: 2 },
+      uplink: { value: 10, unit: 2 }
     },
     security: {
       k: "00000000000000000000000000000000",
