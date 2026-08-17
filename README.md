@@ -56,7 +56,8 @@ cd open5gs-mininet
 # se clonou sem --recurse-submodules:
 # git submodule update --init
 
-# 1) configs locais (versões de imagem, etc.)
+# 1) configs locais (versões de imagem, etc.) — opcional, o `up` cria
+#    automaticamente a partir do .env.example se você pular este passo
 cp .env.example .env
 
 # 2) instalar prereqs

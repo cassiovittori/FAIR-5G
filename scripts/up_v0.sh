@@ -31,6 +31,11 @@ sudo docker compose version >/dev/null 2>&1 || {
   exit 1
 }
 
+if [[ ! -f "$REPO_ROOT/.env" ]]; then
+  echo "[v0] .env não encontrado — copiando de .env.example"
+  cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
+fi
+
 echo "[v0] Repo: $REPO_ROOT"
 
 export FAIR5G_SLICE_COUNT="${FAIR5G_SLICE_COUNT:-2}"
