@@ -53,7 +53,8 @@ Ambiente automatizado (reprodutível) para subir um testbed 5G com **Open5GS (co
 git clone --recurse-submodules <seu_repo>
 cd open5gs-mininet
 
-# se clonou sem --recurse-submodules:
+# se clonou sem --recurse-submodules: opcional, bootstrap/up rodam
+# `git submodule update --init` automaticamente se detectarem o submodule vazio
 # git submodule update --init
 
 # 1) configs locais (versões de imagem, etc.) — opcional, o `up` cria
