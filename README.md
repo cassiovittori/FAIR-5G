@@ -33,7 +33,7 @@ Ambiente automatizado (reprodutível) para subir um testbed 5G com **Open5GS (co
 * **Containernet/Mininet** com:
 
   * 1 switch OVS (OpenFlow13)
-  * 2 UEs docker (`ue1`, `ue2`) ligados ao switch
+  * N UEs docker (`ue1`, `ue2`, ...) ligados ao switch — quantidade de fatias configurável via `--slices` (ver [Comandos](#comandos))
   * “cabo” `veth-sdn` conectado à bridge da rede docker `open5gs`
 
 ---
@@ -50,16 +50,22 @@ Ambiente automatizado (reprodutível) para subir um testbed 5G com **Open5GS (co
 ## Quickstart (do zero)
 
 ```bash
-git clone <seu_repo>
-cd open5gs-mininet-hotfix-refactor
+git clone --recurse-submodules <seu_repo>
+cd open5gs-mininet
 
-# 1) instalar prereqs
+# se clonou sem --recurse-submodules:
+# git submodule update --init
+
+# 1) configs locais (versões de imagem, etc.)
+cp .env.example .env
+
+# 2) instalar prereqs
 ./fair5g bootstrap
 
-# 2) (recomendado) logout/login para aplicar grupo docker
+# 3) (recomendado) logout/login para aplicar grupo docker
 # ou continue usando sudo docker
 
-# 3) subir o ambiente
+# 4) subir o ambiente
 ./fair5g up
 ```
 
@@ -82,10 +88,12 @@ cd open5gs-mininet-hotfix-refactor
 ```bash
 ./fair5gctl.py status
 ./fair5gctl.py up
+./fair5gctl.py up --slices 3
 ./fair5gctl.py down --wipe
 ```
 
 * `--wipe`: remove volumes do compose e remove o container do ONOS (se habilitado no script).
+* `--slices N`: quantidade de fatias a provisionar (padrão 2, máximo 8). Cada fatia gera um par SMF/UPF, um UE e um assinante próprios — configs renderizados por `scripts/render_slice_configs.py` a partir de `configs/templates/`.
 
 ---
 
@@ -130,14 +138,10 @@ ue1 ping -c 3 <IP_DO_GNB>
 
 ## Render de configs runtime dos UEs
 
-Como o IP do gNB pode mudar a cada `up`, o script:
+O `up` roda dois passos de geração antes de subir os containers:
 
-* Obtém o IP do container `gnb` na rede `open5gs`
-* Gera:
-
-  * `configs/runtime/ue1.yaml`
-  * `configs/runtime/ue2.yaml`
-* Substitui `gnbSearchList` com o IP correto do gNB
+1. `scripts/render_slice_configs.py` — a partir dos templates Jinja2 em `configs/templates/`, gera os configs de todas as N fatias (`amf.yaml`, `nssf.yaml`, `gnb.yaml`, `smfN.yaml`, `upfN.yaml`, `ueN.yaml`, assinantes) em `configs/runtime/`.
+2. `scripts/render_ue_configs.sh` — como o IP do gNB pode mudar a cada `up`, substitui o `gnbSearchList` de cada `configs/runtime/ueN.yaml` pelo IP real do container `gnb`.
 
 `configs/runtime/` é gerado automaticamente e está no `.gitignore`.
 
@@ -145,24 +149,31 @@ Como o IP do gNB pode mudar a cada `up`, o script:
 
 ## Estrutura do repo (resumo)
 
+* `fair5gctl/` — pacote da CLI (`cli.py`, `metrics.py`, `tutorial.py`, `core/slicing.py`)
+* `sdn/auto_sdn.py` — orquestração ONOS + veth/iptables + topologia Mininet/Containernet + start dos UEs
+* `configs/templates/` — templates Jinja2 (fonte) dos configs por fatia
+* `configs/network-slicing/` — configs fixos (não dependem da quantidade de fatias)
+* `configs/runtime/` (gerado) — configs finais renderizados para N fatias
 * `compose-files/network-slicing/` — docker compose do Open5GS + métricas + gNB
-* `configs/network-slicing/` — configs base (templates)
-* `configs/runtime/` (gerado) — configs finais dos UEs (com IP do gNB renderizado)
 * `scripts/` — bootstrap/up/down/seed/render
-* `containernet/auto_sdn.py` — ONOS + veth/iptables + topologia + start UEs
+* `docs/` — documentos de arquitetura e evolução do projeto
+* `build/` — build local das imagens Open5GS (`Makefile`/`docker-bake.hcl`); não é necessário para rodar o testbed, que usa imagens prontas do `ghcr.io/borjis131`
+* `containernet/` — submodule do [Containernet](https://github.com/containernet/containernet) (dependência externa, não é código do FAIR-5G)
 * `runs/` (gerado) — logs das execuções (`runs/<run_id>/up.log`)
 
 ---
 
 ## Variável de ambiente
 
-`FAIR5G_CONFIG_DIR`: força o diretório de configs usado pelo `auto_sdn.py`.
+* `FAIR5G_CONFIG_DIR`: força o diretório de configs usado pelo `sdn/auto_sdn.py`.
+* `FAIR5G_SLICE_COUNT`: quantidade de fatias (o `fair5gctl up --slices N` já define isso automaticamente).
 
-Exemplo:
+Exemplo de execução manual (sem passar pelo `fair5gctl`):
 
 ```bash
 export FAIR5G_CONFIG_DIR="$PWD/configs/runtime"
-sudo PYTHONPATH="$PWD/containernet" python3 containernet/auto_sdn.py
+export FAIR5G_SLICE_COUNT=3
+sudo -E PYTHONPATH="$PWD/containernet" python3 sdn/auto_sdn.py
 ```
 
 ---
@@ -193,12 +204,7 @@ containernet> ue1 sh -c "ls -la /UERANSIM/config | head -n 40"
 
 ## Nota sobre `openflow/` (Git)
 
-Se aparecer aviso **“adding embedded git repository: openflow”**, é porque `openflow/` contém outro `.git`.
-
-Sugestões:
-
-* transformar em submodule, **ou**
-* remover do tracking e/ou colocar no `.gitignore` (se não for necessário no repo final)
+`openflow/` é gerado localmente por parte do processo de build do OVS/Containernet e já está no `.gitignore` — não é versionado.
 
 ---
 

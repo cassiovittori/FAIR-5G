@@ -1,0 +1,22 @@
+logger:
+  file:
+    path: /var/log/open5gs/upf.log
+
+global:
+
+upf:
+  pfcp:
+    server:
+      - address: upf{{ slice.index }}.open5gs.org
+    client:
+  gtpu:
+    server:
+      - address: upf{{ slice.index }}.open5gs.org
+  metrics:
+    server:
+      - address: upf{{ slice.index }}.open5gs.org
+        port: 9090
+  session:
+    - subnet: {{ slice.upf_subnet }}
+      gateway: {{ slice.upf_gateway }}
+      dnn: internet

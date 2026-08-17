@@ -33,29 +33,38 @@ sudo docker compose version >/dev/null 2>&1 || {
 
 echo "[v0] Repo: $REPO_ROOT"
 
+export FAIR5G_SLICE_COUNT="${FAIR5G_SLICE_COUNT:-2}"
+echo "[v0] Quantidade de fatias: $FAIR5G_SLICE_COUNT"
+
 preclean
 
-echo "[v0] Subindo Open5GS (docker compose)..."
 cd "$REPO_ROOT"
 
+echo "[v0] Renderizando configs das $FAIR5G_SLICE_COUNT fatia(s)..."
+python3 "$REPO_ROOT/scripts/render_slice_configs.py" --slices "$FAIR5G_SLICE_COUNT"
+
 echo "[v0] Subindo Open5GS via compose file..."
-sudo docker compose -f compose-files/network-slicing/docker-compose.yaml --env-file .env up -d --build --remove-orphans
+sudo docker compose \
+  -f compose-files/network-slicing/docker-compose.yaml \
+  -f compose-files/network-slicing/docker-compose.slices.generated.yaml \
+  --env-file .env up -d --build --remove-orphans
 
 echo "[v0] Seed subscribers (idempotente)..."
-./scripts/seed_subscribers.sh
+SEED_FILE="$REPO_ROOT/open5gs/seed/subscribers.generated.js" ./scripts/seed_subscribers.sh
 
 # Render runtime UE configs (atualiza gnbSearchList com IP real do container gnb)
 if [[ -f "$REPO_ROOT/scripts/render_ue_configs.sh" ]]; then
   echo "[v0] Renderizando configs runtime do UE (gnbSearchList)..."
   ./scripts/render_ue_configs.sh
-  export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 else
-  echo "[v0] scripts/render_ue_configs.sh não encontrado; usando configs/network-slicing direto."
-  export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/network-slicing"
+  echo "[ERRO] scripts/render_ue_configs.sh não encontrado."
+  exit 1
 fi
+export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
+  FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
   PYTHONPATH="$REPO_ROOT/containernet" \
-  python3 "$REPO_ROOT/containernet/auto_sdn.py"
+  python3 "$REPO_ROOT/sdn/auto_sdn.py"
 

@@ -91,7 +91,7 @@ fi
 
 # --- Dependências Python do FAIR-5G (metrics.py + tutorial.py) ---
 log "Instalando dependências Python do FAIR-5G..."
-PIP_PACKAGES="rich pyfiglet requests questionary flask"
+PIP_PACKAGES="rich pyfiglet requests questionary flask jinja2 pyyaml"
 
 if pip3 install --help 2>&1 | grep -q 'break-system-packages'; then
   pip3 install $PIP_PACKAGES --break-system-packages
@@ -99,7 +99,7 @@ else
   pip3 install $PIP_PACKAGES --user
 fi
 log "Validando dependências Python..."
-python3 -c "import rich, pyfiglet, requests, questionary, flask; print('Python FAIR-5G deps OK')" || \
+python3 -c "import rich, pyfiglet, requests, questionary, flask, jinja2, yaml; print('Python FAIR-5G deps OK')" || \
   echo "[!] Alguma dependência Python não foi instalada corretamente."
 
 log "Validando versões instaladas..."

@@ -1,0 +1,40 @@
+services:
+{% for slice in slices %}
+  smf{{ slice.index }}:
+    container_name: smf{{ slice.index }}
+    image: "ghcr.io/borjis131/smf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/smf{{ slice.index }}.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - smf{{ slice.index }}.open5gs.org
+    configs:
+      - source: smf{{ slice.index }}_config
+        target: /etc/open5gs/custom/smf{{ slice.index }}.yaml
+    depends_on:
+      - nrf
+      - upf{{ slice.index }}
+
+  upf{{ slice.index }}:
+    container_name: upf{{ slice.index }}
+    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
+    command: "-c /etc/open5gs/custom/upf{{ slice.index }}.yaml"
+    networks:
+      open5gs:
+        aliases:
+          - upf{{ slice.index }}.open5gs.org
+    configs:
+      - source: upf{{ slice.index }}_config
+        target: /etc/open5gs/custom/upf{{ slice.index }}.yaml
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+
+{% endfor %}
+configs:
+{% for slice in slices %}
+  smf{{ slice.index }}_config:
+    file: ../../configs/runtime/smf{{ slice.index }}.yaml
+  upf{{ slice.index }}_config:
+    file: ../../configs/runtime/upf{{ slice.index }}.yaml
+{% endfor %}
