@@ -11,6 +11,11 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 log "Repo root detectado: $REPO_ROOT"
 
+if [[ ! -f "$REPO_ROOT/containernet/mininet/net.py" ]]; then
+  log "Submodule containernet/ não inicializado — rodando git submodule update --init..."
+  git -C "$REPO_ROOT" submodule update --init
+fi
+
 # --- sanity check: DNS / internet ---
 log "Checando conectividade (DNS)..."
 if ! getent hosts google.com >/dev/null 2>&1; then

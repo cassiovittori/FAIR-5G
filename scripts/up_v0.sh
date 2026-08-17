@@ -36,6 +36,11 @@ if [[ ! -f "$REPO_ROOT/.env" ]]; then
   cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
 fi
 
+if [[ ! -f "$REPO_ROOT/containernet/mininet/net.py" ]]; then
+  echo "[v0] Submodule containernet/ não inicializado — rodando git submodule update --init"
+  git -C "$REPO_ROOT" submodule update --init
+fi
+
 echo "[v0] Repo: $REPO_ROOT"
 
 export FAIR5G_SLICE_COUNT="${FAIR5G_SLICE_COUNT:-2}"
