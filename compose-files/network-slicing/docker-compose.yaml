@@ -127,65 +127,9 @@ services:
     depends_on:
       - nrf
 
-  smf1:
-    container_name: smf1
-    image: "ghcr.io/borjis131/smf:${OPEN5GS_VERSION}"
-    command: "-c /etc/open5gs/custom/smf1.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - smf1.open5gs.org
-    configs:
-      - source: smf1_config
-        target: /etc/open5gs/custom/smf1.yaml
-    depends_on:
-      - nrf
-      - upf1
-
-  smf2:
-    container_name: smf2
-    image: "ghcr.io/borjis131/smf:${OPEN5GS_VERSION}"
-    command: "-c /etc/open5gs/custom/smf2.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - smf2.open5gs.org
-    configs:
-      - source: smf2_config
-        target: /etc/open5gs/custom/smf2.yaml
-    depends_on:
-      - nrf
-      - upf2
-
-  upf1:
-    container_name: upf1
-    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
-    command: "-c /etc/open5gs/custom/upf1.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - upf1.open5gs.org
-    configs:
-      - source: upf1_config
-        target: /etc/open5gs/custom/upf1.yaml
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-
-  upf2:
-    container_name: upf2
-    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
-    command: "-c /etc/open5gs/custom/upf2.yaml"
-    networks:
-      open5gs:
-        aliases:
-          - upf2.open5gs.org
-    configs:
-      - source: upf2_config
-        target: /etc/open5gs/custom/upf2.yaml
-    privileged: true
-    cap_add:
-      - NET_ADMIN
+  # smfN/upfN: número de fatias é dinâmico (fair5gctl up --slices N), então esses
+  # serviços vêm de compose-files/network-slicing/docker-compose.slices.generated.yaml
+  # (gerado por scripts/render_slice_configs.py e mesclado via -f no scripts/up_v0.sh).
 
   gnb:
     container_name: gnb
@@ -200,8 +144,6 @@ services:
         target: /UERANSIM/config/gnb.yaml
     depends_on:
       - amf
-      - smf1
-      - smf2
       - pcf
       - udr
 
@@ -222,11 +164,7 @@ services:
     depends_on:
       - amf
       - pcf
-      - smf1
-      - smf2
-      - upf1
-      - upf2
-      
+
   blackbox:
     image: prom/blackbox-exporter:latest
     container_name: blackbox
@@ -317,26 +255,20 @@ configs:
     file: ../../configs/network-slicing/udm.yaml
   udr_config:
     file: ../../configs/network-slicing/udr.yaml
-  nssf_config:
-    file: ../../configs/network-slicing/nssf.yaml
   bsf_config:
     file: ../../configs/network-slicing/bsf.yaml
   pcf_config:
     file: ../../configs/network-slicing/pcf.yaml
+  # amf/nssf/gnb/prometheus dependem da quantidade de fatias (N) e são gerados em
+  # configs/runtime/ por scripts/render_slice_configs.py antes do `docker compose up`.
   amf_config:
-    file: ../../configs/network-slicing/amf.yaml
-  smf1_config:
-    file: ../../configs/network-slicing/smf1.yaml
-  smf2_config:
-    file: ../../configs/network-slicing/smf2.yaml
-  upf1_config:
-    file: ../../configs/network-slicing/upf1.yaml
-  upf2_config:
-    file: ../../configs/network-slicing/upf2.yaml
+    file: ../../configs/runtime/amf.yaml
+  nssf_config:
+    file: ../../configs/runtime/nssf.yaml
   gnb_config:
-    file: ../../configs/network-slicing/gnb.yaml
+    file: ../../configs/runtime/gnb.yaml
   prometheus_config:
-    file: ../../configs/network-slicing/prometheus.yml
+    file: ../../configs/runtime/prometheus.yml
   grafana_datasource:
     file: ../../configs/network-slicing/grafana/datasource.yaml
   grafana_dashboard_provider:

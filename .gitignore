@@ -5,6 +5,8 @@
 # runtime generated
 configs/runtime/
 runs/
+compose-files/network-slicing/docker-compose.slices.generated.yaml
+open5gs/seed/subscribers.generated.js
 
 # python
 __pycache__/
@@ -27,3 +29,4 @@ openflow/
 # vendor/build dir
 openflow/
 
+tests/

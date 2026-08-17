@@ -1,0 +1,64 @@
+// open5gs/seed/subscribers.js — GERADO por scripts/render_slice_configs.py, não editar manualmente.
+db = db.getSiblingDB("open5gs");
+
+const subs = [
+{% for slice in slices %}
+  {
+    imsi: "{{ slice.imsi }}",
+    subscribed_rau_tau_timer: 12,
+    network_access_mode: 0,
+    subscriber_status: 0,
+    access_restriction_data: 32,
+    slice: [
+      {
+        sst: {{ slice.sst }},
+        sd: "{{ slice.sd_hex }}",
+        default_indicator: true,
+        session: [
+          {
+            name: "internet",
+            type: 3,
+            qos: {
+              index: {{ slice.qos_index }},
+              arp: {
+                priority_level: 8,
+                pre_emption_capability: 1,
+                pre_emption_vulnerability: 1
+              }
+            },
+            ambr: {
+              downlink: { value: {{ slice.ambr_down_mbps }}, unit: 2 },
+              uplink: { value: {{ slice.ambr_up_mbps }}, unit: 2 }
+            },
+            pcc_rule: []
+          }
+        ]
+      }
+    ],
+    ambr: {
+      downlink: { value: {{ slice.ambr_down_mbps }}, unit: 2 },
+      uplink: { value: {{ slice.ambr_up_mbps }}, unit: 2 }
+    },
+    security: {
+      k: "00000000000000000000000000000000",
+      amf: "8000",
+      op: null,
+      opc: "00000000000000000000000000000000"
+    },
+    schema_version: 1,
+    __v: 0
+  },
+{% endfor %}
+];
+
+let upserts = 0;
+for (const s of subs) {
+  const res = db.subscribers.updateOne(
+    { imsi: s.imsi },
+    { $set: s },
+    { upsert: true }
+  );
+  if (res.upsertedCount) upserts += 1;
+}
+
+print(`[seed] subscribers processed=${subs.length} upserts=${upserts}`);

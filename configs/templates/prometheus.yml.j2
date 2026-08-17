@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: amf
+    static_configs:
+      - targets: ["amf.open5gs.org:9090"]
+  - job_name: pcf
+    static_configs:
+      - targets: ["pcf.open5gs.org:9090"]
+  - job_name: smf
+    static_configs:
+      - targets: [{% for slice in slices %}"smf{{ slice.index }}.open5gs.org:9090"{% if not loop.last %}, {% endif %}{% endfor %}]
+  - job_name: upf
+    static_configs:
+      - targets: [{% for slice in slices %}"upf{{ slice.index }}.open5gs.org:9090"{% if not loop.last %}, {% endif %}{% endfor %}]
+  - job_name: 'blackbox-ping-slices'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+{% for slice in slices %}
+        - {{ slice.ue_mininet_ip }}
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

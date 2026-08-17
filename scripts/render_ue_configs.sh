@@ -2,10 +2,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC_DIR="$REPO_ROOT/configs/network-slicing"
-OUT_DIR="$REPO_ROOT/configs/runtime"
+RUNTIME_DIR="$REPO_ROOT/configs/runtime"
 
-mkdir -p "$OUT_DIR"
+shopt -s nullglob
+ue_files=("$RUNTIME_DIR"/ue*.yaml)
+if [[ ${#ue_files[@]} -eq 0 ]]; then
+  echo "[render] Nenhum ue*.yaml em $RUNTIME_DIR — rode scripts/render_slice_configs.py primeiro."
+  exit 1
+fi
 
 GNB_IP="$(sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gnb)"
 if [[ -z "$GNB_IP" ]]; then
@@ -15,9 +19,9 @@ fi
 
 echo "[render] gnb ip: $GNB_IP"
 
-render_one () {
-  local src="$1"
-  local out="$2"
+patch_gnb_search_list () {
+  local target="$1"
+  local tmp="${target}.tmp"
 
   # substitui bloco gnbSearchList por um único item (ip do gnb)
   awk -v ip="$GNB_IP" '
@@ -35,11 +39,11 @@ render_one () {
       inlist=0
     }
     {print}
-  ' "$src" > "$out"
+  ' "$target" > "$tmp"
+  mv "$tmp" "$target"
 }
 
-render_one "$SRC_DIR/ue1.yaml" "$OUT_DIR/ue1.yaml"
-render_one "$SRC_DIR/ue2.yaml" "$OUT_DIR/ue2.yaml"
-
-echo "[render] gerado: $OUT_DIR/ue1.yaml"
-echo "[render] gerado: $OUT_DIR/ue2.yaml"
+for f in "${ue_files[@]}"; do
+  patch_gnb_search_list "$f"
+  echo "[render] atualizado: $f"
+done

@@ -25,11 +25,16 @@ while sudo iptables -D DOCKER-USER -j ACCEPT 2>/dev/null; do :; done
 echo "[v0] Derrubando Open5GS (docker compose)..."
 cd "$REPO_ROOT/compose-files/network-slicing"
 
+compose_files=(-f docker-compose.yaml)
+if [[ -f docker-compose.slices.generated.yaml ]]; then
+  compose_files+=(-f docker-compose.slices.generated.yaml)
+fi
+
 if [[ "${FAIR5G_WIPE:-0}" == "1" ]]; then
   echo "[v0] FAIR5G_WIPE=1: removendo volumes também (-v)."
-  sudo docker compose down -v --remove-orphans
+  sudo docker compose "${compose_files[@]}" down -v --remove-orphans
 else
-  sudo docker compose down --remove-orphans
+  sudo docker compose "${compose_files[@]}" down --remove-orphans
 fi
 
 # ONOS: por padrão, remove para ficar determinístico; se quiser manter, set FAIR5G_KEEP_ONOS=1
