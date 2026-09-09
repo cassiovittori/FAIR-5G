@@ -1,0 +1,61 @@
+--- patches/auto_sdn.py.orig	2026-09-03 23:57:23.844415159 +0000
++++ fair5g_v3/FAIR-5G-main/sdn/auto_sdn.py	2026-09-03 23:57:49.188155494 +0000
+@@ -274,7 +274,7 @@
+     for spec in specs:
+         meter_id = rate_to_id.get(rate_by_index[spec.index])
+         meter_ids[spec.index] = meter_id
+-        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]}KB/s")
++        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]} kbps")
+     return meter_ids
+ 
+ 
+@@ -343,6 +343,26 @@
+ 
+ 
+ def ue_session_listener(user: str, password: str, dpid: str, ue_configs: dict, stop_event):
++    """Observa o estado das sessões PDU de cada UE.
++
++    IMPORTANTE — mudança de comportamento (2026-09-03):
++    Este listener anteriormente REMOVIA os flows proativos (que casam no IP de
++    transporte do UE, ex. 10.33.33.200) e os substituía por flows casando no IP
++    de sessão PDU (ex. 10.45.0.2). Isso desativava silenciosamente todo o
++    enforcement de QoS no momento em que a sessão subia.
++
++    Motivo: o switch s1 fica no segmento UE <-> gNB, onde o tráfego trafega
++    encapsulado pelo protocolo RLS do UERANSIM (UDP/4997). O IP de sessão PDU
++    existe apenas dentro do payload e NUNCA é visível para o OpenFlow, de modo
++    que as regras baseadas nele jamais podiam casar. Verificado empiricamente
++    via tcpdump em s1-eth1 e por contadores zerados em dump-flows/meter-stats.
++
++    O IP de transporte é fixo e único por UE (10.33.33.199+index), portanto
++    identifica a fatia de forma inequívoca enquanto a relação for 1 UE = 1 fatia.
++    Os flows proativos são então mantidos por toda a vida do ambiente e este
++    listener passa a apenas registrar transições de estado da sessão, sem
++    manipular a tabela de fluxos.
++    """
+     ue_state = {name: None for name in ue_configs}
+     while not stop_event.is_set():
+         for cname, cfg in ue_configs.items():
+@@ -350,18 +370,12 @@
+             prev_ip = ue_state[cname]
+             if current_ip == prev_ip:
+                 continue
+-            if prev_ip is not None:
+-                remove_flows_for_ip(user, password, dpid, prev_ip)
+-                if current_ip is None:
+-                    install_ue_flows(user, password, dpid, cfg["mn_ip"], cfg["deny_subnets"],
+-                                     cfg["port_ue"], cfg["port_core"], cfg["meter_id"])
+-                    print(f"[SDN] {cname}: sessão encerrada — flows estáticos restaurados ({cfg['mn_ip']})")
+             if current_ip is not None:
+-                if prev_ip is None:
+-                    remove_flows_for_ip(user, password, dpid, cfg["mn_ip"])
+-                install_ue_flows(user, password, dpid, current_ip, cfg["deny_subnets"],
+-                                 cfg["port_ue"], cfg["port_core"], cfg["meter_id"])
+-                print(f"[SDN] {cname}: sessão PDU ativa — flows dinâmicos instalados ({current_ip})")
++                print(f"[SDN] {cname}: sessão PDU ativa (IP interno {current_ip}); "
++                      f"enforcement permanece nos flows de transporte ({cfg['mn_ip']}).")
++            else:
++                print(f"[SDN] {cname}: sessão PDU encerrada; "
++                      f"flows de transporte ({cfg['mn_ip']}) seguem instalados.")
+             ue_state[cname] = current_ip
+         stop_event.wait(1)

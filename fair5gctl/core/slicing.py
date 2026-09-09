@@ -6,14 +6,37 @@ MIN_SLICE_COUNT = 1
 # do Open5GS/UERANSIM para esse campo nunca foram testados com letras — manter <=8 evita a ambiguidade.
 MAX_SLICE_COUNT = 8
 
+# Perfis calibrados pela capacidade medida do ambiente emulado.
+#
+# Teto do uplink de uma fatia, medido em 2026-09-08 com um flow de prioridade 600
+# SEM meter (controle) e iperf3/TCP de UE1 ate a UPF1: 50,8 Mbps. Reintroduzindo
+# o meter na mesma sessao, o throughput caiu para 12,4 Mbps, confirmando que o
+# meter e o fator limitante e nao o ambiente.
+#
+# Criterio de escolha dos valores: (1) ambos abaixo do teto, para que o
+# enforcement seja observavel; (2) soma de N fatias proxima do teto sem que uma
+# unica fatia possa consumir toda a capacidade, permitindo operar varias fatias
+# simultaneamente e atribuir efeitos com clareza; (3) razao suficiente entre os
+# perfis para que a diferenciacao seja mensuravel.
+#
+# ATENCAO para os experimentos de isolamento: com a soma dos perfis abaixo do
+# teto as fatias nunca competem por recurso, e o isolamento se sustenta
+# trivialmente. Cenarios de disputa exigem sobre-subscricao deliberada (soma dos
+# perfis acima do teto) — nesses casos, sobrescrever estes valores por execucao.
 QOS_PROFILES = [
-    {"index": 9, "ambr_down_mbps": 100, "ambr_up_mbps": 50},
-    {"index": 2, "ambr_down_mbps": 10, "ambr_up_mbps": 10},
+    {"index": 9, "ambr_down_mbps": 12, "ambr_up_mbps": 12},   # perfil tipo eMBB
+    {"index": 2, "ambr_down_mbps": 4, "ambr_up_mbps": 4},     # perfil tipo URLLC
 ]
 
 # Os UEs ficam na rede de ACESSO (10.34.0.0/24), separada da rede de transporte do
-# core (10.33.33.0/24). O gNB é dual-homed e é a única ponte entre as duas — assim o
-# core é inalcançável a partir de um UE por topologia, não por regra de firewall.
+# core (10.33.33.0/24). O gNB e dual-homed e faz a ponte em nivel de aplicacao
+# (termina o RLS de um lado, origina NGAP/GTP-U do outro). O container blackbox
+# tambem tem perna nas duas redes, por necessidade de observabilidade — logo o
+# gNB NAO e a unica travessia. Verificado em 2026-09-08: o blackbox tem
+# ip_forward=1, e o UE o alcanca (whitelist do OVS). Uma tentativa de pivo com
+# rota estatica UE -> blackbox -> AMF nao alcancou o core nas condicoes testadas,
+# mas o caminho existe e deve ser tratado como superficie de ataque no modelo de
+# ameacas, nao como impossibilidade topologica.
 ACCESS_SUBNET = "10.34.0.0/24"
 _UE_ACCESS_PREFIX = "10.34.0"
 _UE_ACCESS_BASE_OCTET = 199
@@ -85,4 +108,10 @@ def other_subnets(specs: list[SliceSpec], index: int) -> list[str]:
 
 
 def meter_rate_kbps(ambr_down_mbps: int) -> int:
-    return ambr_down_mbps * 125
+    # Meters OpenFlow criados com a flag "kbps" esperam a taxa em KILOBITS por
+    # segundo. A conversao anterior (* 125) produzia kilobytes por segundo,
+    # tornando o enforcement 8x mais restritivo que o AMBR pretendido.
+    # Verificado por medicao em 2026-09-08 (release 4134d33, VM 8GB/4vCPU):
+    # perfil declarado de 100 Mbps -> meter gravado como 12500 kbps -> iperf3
+    # dentro do tunel PDU mediu 12,3 Mbps. Fator 8 exato (1000/125).
+    return ambr_down_mbps * 1000

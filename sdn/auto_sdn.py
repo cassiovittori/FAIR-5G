@@ -312,7 +312,7 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
     for spec in specs:
         meter_id = rate_to_id.get(rate_by_index[spec.index])
         meter_ids[spec.index] = meter_id
-        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]}KB/s")
+        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]} kbps")
     return meter_ids
 
 

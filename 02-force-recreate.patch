@@ -1,0 +1,11 @@
+--- patches/up_v0.sh.orig	2026-09-03 00:08:03.458406509 +0000
++++ fair5g_v3/FAIR-5G-main/scripts/up_v0.sh	2026-09-03 00:08:21.059803405 +0000
+@@ -57,7 +57,7 @@
+ sudo docker compose \
+   -f compose-files/network-slicing/docker-compose.yaml \
+   -f compose-files/network-slicing/docker-compose.slices.generated.yaml \
+-  --env-file .env up -d --build --remove-orphans
++  --env-file .env up -d --build --remove-orphans --force-recreate
+ 
+ echo "[v0] Seed subscribers (idempotente)..."
+ SEED_FILE="$REPO_ROOT/open5gs/seed/subscribers.generated.js" ./scripts/seed_subscribers.sh
