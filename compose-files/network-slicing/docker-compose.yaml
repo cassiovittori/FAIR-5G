@@ -137,6 +137,13 @@ services:
     command: "-c /UERANSIM/config/gnb.yaml"
     # Dual-homed: perna no core (NGAP/GTP-U) + perna na rede de acesso (link de rádio
     # simulado com os UEs). É a fronteira entre acesso e transporte, como um gNB real.
+    #
+    # A travessia é feita em nível de APLICAÇÃO (termina RLS de um lado, origina
+    # NGAP/GTP-U do outro). Com `ip_forward=0` o kernel não roteia entre as duas pernas,
+    # então o container não pode ser usado como roteador de pivô do acesso para o core —
+    # isso vira propriedade estrutural, não algo que depende do whitelist do OVS estar certo.
+    sysctls:
+      net.ipv4.ip_forward: 0
     networks:
       open5gs:
         aliases:
@@ -177,7 +184,10 @@ services:
       - "9115:9115"
     # Exceção de observabilidade: o job `blackbox-ping-slices` sonda os IPs dos UEs, que
     # ficam na rede de acesso. Sem essa perna o probe morre e os painéis de latência por
-    # fatia ficam vazios. Como o gNB, não roteia entre as redes — só origina os probes.
+    # fatia ficam vazios. Só ORIGINA probes — `ip_forward=0` garante que não pode ser
+    # usado como roteador de pivô do acesso para o core.
+    sysctls:
+      net.ipv4.ip_forward: 0
     networks:
       open5gs:
         aliases:
