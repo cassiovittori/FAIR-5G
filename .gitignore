@@ -30,3 +30,4 @@ openflow/
 openflow/
 
 tests/
+.fair5g_state.json

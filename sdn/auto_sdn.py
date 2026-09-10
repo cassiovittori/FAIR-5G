@@ -301,18 +301,46 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
         print("[AVISO] Não foi possível obter IDs dos meters — flows sem QoS enforcement.")
         return {}
 
-    rate_to_id = {}
+    # Mapeia cada fatia ao SEU meter, consumindo cada id uma unica vez.
+    #
+    # A versao anterior montava um dicionario taxa -> id. Como os QOS_PROFILES
+    # se repetem ciclicamente, duas fatias com o mesmo AMBR colapsavam na mesma
+    # chave e passavam a compartilhar um unico meter — ou seja, dividiam um
+    # limite agregado em vez de terem um limite cada, enquanto o log informava
+    # que N meters haviam sido instalados. Observado em 2026-09-09 com 4 fatias:
+    # "Meter fatia 1: id=3" e "Meter fatia 3: id=3", com dois meters orfaos.
+    available = []
     for m in meters_data.get("meters", []):
         for band in m.get("bands", []):
             r = band.get("rate")
             if r in rate_by_index.values():
-                rate_to_id[r] = m.get("id")
+                available.append((m.get("id"), r))
+                break
 
     meter_ids = {}
+    used = set()
     for spec in specs:
-        meter_id = rate_to_id.get(rate_by_index[spec.index])
+        target_rate = rate_by_index[spec.index]
+        meter_id = None
+        for mid, r in available:
+            if r == target_rate and mid not in used:
+                meter_id = mid
+                used.add(mid)
+                break
+        if meter_id is None:
+            print(
+                f"[AVISO] nenhum meter disponivel para a fatia {spec.index} "
+                f"(taxa {target_rate} kbps) — esta fatia ficara SEM enforcement de QoS."
+            )
         meter_ids[spec.index] = meter_id
-        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]} kbps")
+        print(f"Meter fatia {spec.index}: id={meter_id} rate={target_rate} kbps")
+
+    distintos = len({v for v in meter_ids.values() if v is not None})
+    if distintos != len(specs):
+        print(
+            f"[AVISO] {distintos} meter(s) distinto(s) para {len(specs)} fatia(s): "
+            f"ha fatias compartilhando limite agregado."
+        )
     return meter_ids
 
 

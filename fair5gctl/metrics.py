@@ -45,10 +45,31 @@ GRAFANA_DASHBOARD = os.environ.get("GRAFANA_DASHBOARD", "")
 # Derivado de core.slicing (fonte unica de verdade do enderecamento) em vez de
 # hardcoded: quando a subnet dos UEs muda, as queries acompanham sozinhas.
 def _ue_ip_defaults() -> dict:
+    """IPs de acesso dos UEs, por indice de fatia.
+
+    A quantidade de fatias e resolvida nesta ordem de precedencia:
+      1. FAIR5G_SLICE_COUNT no ambiente (util para sobrescrever pontualmente);
+      2. .fair5g_state.json, gravado pelo `up` — necessario porque `metrics`
+         normalmente roda em OUTRO terminal, onde a variavel de ambiente do
+         processo do `up` nao existe;
+      3. DEFAULT_SLICE_COUNT.
+
+    Sem o passo 2 o painel exibia apenas as fatias padrao mesmo com N no ar
+    (observado em 2026-09-09: 4 fatias ativas, 2 exibidas).
+    """
     try:
         from .core.slicing import build_slice_specs, DEFAULT_SLICE_COUNT
-        count = int(os.environ.get("FAIR5G_SLICE_COUNT", DEFAULT_SLICE_COUNT))
-        return {s.index: s.ue_mininet_ip for s in build_slice_specs(count)}
+
+        count = os.environ.get("FAIR5G_SLICE_COUNT")
+        if not count:
+            try:
+                state_file = Path(__file__).resolve().parent.parent / ".fair5g_state.json"
+                count = json.loads(state_file.read_text()).get("slice_count")
+            except Exception:
+                count = None
+        if not count:
+            count = DEFAULT_SLICE_COUNT
+        return {s.index: s.ue_mininet_ip for s in build_slice_specs(int(count))}
     except Exception:
         return {}
 
@@ -57,37 +78,85 @@ _UE_IPS = _ue_ip_defaults()
 UE1_IP = os.environ.get("UE1_IP", _UE_IPS.get(1, ""))
 UE2_IP = os.environ.get("UE2_IP", _UE_IPS.get(2, ""))
 
+
+def _slice_indices() -> list:
+    """Indices de fatia ativos, derivados de core.slicing.
+
+    Sem isso as consultas ficariam presas a duas fatias, enquanto o
+    prometheus.yml ja e gerado dinamicamente para N fatias: o ambiente
+    coletaria tudo e a CLI exibiria apenas metade.
+    """
+    if _UE_IPS:
+        return sorted(_UE_IPS.keys())
+    return [1, 2]
+
+
+def _build_queries() -> dict:
+    """Monta as consultas Prometheus para as N fatias ativas.
+
+    NOTA SOBRE A METRICA DE LATENCIA (decisao de 2026-09-09):
+    a metrica oficial de latencia e `probe_icmp_duration_seconds{phase="rtt"}`,
+    que corresponde ao round-trip time do pacote ICMP.
+
+    A metrica `probe_duration_seconds` foi REMOVIDA do painel. Ela mede a
+    duracao total da sondagem do ponto de vista do blackbox exporter, somando
+    as fases de resolucao de nome, preparacao do socket e o RTT propriamente
+    dito. Ou seja, agrega o custo da instrumentacao ao desempenho da rede, o
+    que a torna inadequada como indicador de latencia de rede: e sempre maior
+    que o RTT e a diferenca nao tem significado de rede. Exibi-la ao lado do
+    RTT convidava a interpretacao equivocada de que seriam duas medidas
+    comparaveis da mesma grandeza.
+    """
+    indices = _slice_indices()
+
+    conectividade = {}
+    latencia = {}
+    for i in indices:
+        ip = _UE_IPS.get(i, "")
+        conectividade[f"Probe fatia {i} (OK=1)"] = (
+            f'probe_success{{job="blackbox-ping-slices", instance="{ip}"}}'
+        )
+        latencia[f"Fatia {i} RTT ICMP"] = (
+            f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", '
+            f'instance="{ip}", phase="rtt"}} * 1000'
+        )
+
+    smf = {}
+    upf = {}
+    for i in indices:
+        smf[f"PDU Sessions SMF{i}"] = (
+            f'fivegs_smffunction_sm_pdusessioncreationreq'
+            f'{{job="smf", instance="smf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"Sessoes UPF{i}"] = (
+            f'fivegs_upffunction_upf_sessionnbr'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"QoS Flows UPF{i}"] = (
+            f'fivegs_upffunction_upf_qosflows'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"GTP Ingress UPF{i} (p/s)"] = (
+            f'rate(fivegs_ep_n3_gtp_indatapktn3upf'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}[1m])'
+        )
+
+    return {
+        "Conectividade": conectividade,
+        "Latencia (ms)": latencia,
+        "AMF": {
+            "UEs Registrados":     'ran_ue{job="amf"}',
+            "Sessoes AMF":         'amf_session{job="amf"}',
+            "Taxa Registro (r/s)": 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
+            "Taxa Auth (r/s)":     'rate(fivegs_amffunction_amf_authreq{job="amf"}[1m])',
+        },
+        "SMF": smf,
+        "UPF": upf,
+    }
+
+
 # Queries Prometheus organizadas por categoria
-QUERIES = {
-    "Conectividade": {
-        "Probe UE1 (OK=1)":   f'probe_success{{job="blackbox-ping-slices", instance="{UE1_IP}"}}',
-        "Probe UE2 (OK=1)":   f'probe_success{{job="blackbox-ping-slices", instance="{UE2_IP}"}}',
-    },
-    "Latencia (ms)": {
-        "UE1 Latencia Total":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}"}} * 1000',
-        "UE2 Latencia Total":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}"}} * 1000',
-        "UE1 RTT ICMP":        f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}", phase="rtt"}} * 1000',
-        "UE2 RTT ICMP":        f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}", phase="rtt"}} * 1000',
-    },
-    "AMF": {
-        "UEs Registrados":     'ran_ue{job="amf"}',
-        "Sessoes AMF":         'amf_session{job="amf"}',
-        "Taxa Registro (r/s)": 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
-        "Taxa Auth (r/s)":     'rate(fivegs_amffunction_amf_authreq{job="amf"}[1m])',
-    },
-    "SMF": {
-        "PDU Sessions SMF1":   'fivegs_smffunction_sm_pdusessioncreationreq{job="smf", instance="smf1.open5gs.org:9090"}',
-        "PDU Sessions SMF2":   'fivegs_smffunction_sm_pdusessioncreationreq{job="smf", instance="smf2.open5gs.org:9090"}',
-    },
-    "UPF": {
-        "Sessoes UPF1":        'fivegs_upffunction_upf_sessionnbr{job="upf", instance="upf1.open5gs.org:9090"}',
-        "Sessoes UPF2":        'fivegs_upffunction_upf_sessionnbr{job="upf", instance="upf2.open5gs.org:9090"}',
-        "QoS Flows UPF1":      'fivegs_upffunction_upf_qosflows{job="upf", instance="upf1.open5gs.org:9090"}',
-        "QoS Flows UPF2":      'fivegs_upffunction_upf_qosflows{job="upf", instance="upf2.open5gs.org:9090"}',
-        "GTP Ingress UPF1 (p/s)": 'rate(fivegs_ep_n3_gtp_indatapktn3upf{job="upf", instance="upf1.open5gs.org:9090"}[1m])',
-        "GTP Ingress UPF2 (p/s)": 'rate(fivegs_ep_n3_gtp_indatapktn3upf{job="upf", instance="upf2.open5gs.org:9090"}[1m])',
-    },
-}
+QUERIES = _build_queries()
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -258,13 +327,20 @@ def cmd_report(run_id: str, runs_dir: Path):
 
     # Coleta série temporal dos últimos 30min para calcular estatísticas
     stats = {}
-    range_queries = {
-        "ue1_latency_ms":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}"}} * 1000',
-        "ue2_latency_ms":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}"}} * 1000',
-        "ue1_probe_success": f'probe_success{{job="blackbox-ping-slices", instance="{UE1_IP}"}}',
-        "ue2_probe_success": f'probe_success{{job="blackbox-ping-slices", instance="{UE2_IP}"}}',
-        "amf_reg_rate":    'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
-    }
+    # Chaves por fatia (slice{i}_*) em vez de ue1_/ue2_ fixos, e RTT como
+    # metrica de latencia — ver nota em _build_queries sobre por que
+    # probe_duration_seconds foi descartada.
+    range_queries = {}
+    for i in _slice_indices():
+        ip = _UE_IPS.get(i, "")
+        range_queries[f"slice{i}_rtt_ms"] = (
+            f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", '
+            f'instance="{ip}", phase="rtt"}} * 1000'
+        )
+        range_queries[f"slice{i}_probe_success"] = (
+            f'probe_success{{job="blackbox-ping-slices", instance="{ip}"}}'
+        )
+    range_queries["amf_reg_rate"] = 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])'
 
     now = int(time.time())
     start = now - 1800  # últimos 30 min
@@ -305,7 +381,7 @@ def cmd_report(run_id: str, runs_dir: Path):
         "generated_at": ts,
         "prometheus":   PROMETHEUS_URL,
         "grafana":      GRAFANA_URL,
-        "ue_ips":       {"ue1": UE1_IP, "ue2": UE2_IP},
+        "ue_ips":       {f"slice{i}": _UE_IPS.get(i, "") for i in _slice_indices()},
         "snapshot":     {
             cat: {k: v for k, v in metrics.items()}
             for cat, metrics in data.items()
@@ -389,13 +465,13 @@ def _print_report_summary(report: dict):
         tbl.add_column("P95",  justify="right")
         tbl.add_column("Max",  justify="right")
 
-        labels = {
-            "ue1_latency_ms":   "UE1 Latência (ms)",
-            "ue2_latency_ms":   "UE2 Latência (ms)",
-            "ue1_probe_success": "UE1 Probe Success",
-            "ue2_probe_success": "UE2 Probe Success",
-            "amf_reg_rate":     "AMF Reg Rate (r/s)",
-        }
+        # Rotulos derivados das chaves realmente coletadas, para acompanhar
+        # N fatias em vez de assumir duas.
+        labels = {}
+        for i in _slice_indices():
+            labels[f"slice{i}_rtt_ms"] = f"Fatia {i} RTT (ms)"
+            labels[f"slice{i}_probe_success"] = f"Fatia {i} Probe Success"
+        labels["amf_reg_rate"] = "AMF Reg Rate (r/s)"
 
         for key, label in labels.items():
             s = stats.get(key)

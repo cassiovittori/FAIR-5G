@@ -1,8 +1,9 @@
 import argparse
+import json
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -196,6 +197,50 @@ def new_run_id():
 def runs_dir(run_id: str) -> Path:
     return REPO_ROOT / "runs" / run_id
 
+
+# ── estado do ambiente ────────────────────────────────────────────────────────
+# Arquivo gravado pelo `up` e lido por qualquer comando que precise saber COMO o
+# ambiente foi levantado (quantas fatias, qual run_id). Sem ele, o comando
+# `metrics` executado em outro terminal nao enxerga FAIR5G_SLICE_COUNT — que so
+# existe no processo do `up` — e assume o valor padrao, exibindo menos fatias do
+# que realmente estao no ar. Observado em 2026-09-09: ambiente com 4 fatias,
+# painel mostrando 2, enquanto o AMF reportava 4 UEs registrados.
+#
+# Este arquivo tambem serve de base para o desacoplamento do ciclo de vida do
+# ambiente da CLI interativa do Containernet.
+
+STATE_FILE = REPO_ROOT / ".fair5g_state.json"
+
+
+def write_state(run_id: str, slice_count: int, config_dir: str = "") -> None:
+    payload = {
+        "run_id": run_id,
+        "slice_count": int(slice_count),
+        "config_dir": config_dir,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        STATE_FILE.write_text(json.dumps(payload, indent=2))
+    except Exception as e:
+        print(f"[AVISO] nao foi possivel gravar {STATE_FILE.name}: {e}")
+
+
+def read_state() -> dict:
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def clear_state() -> None:
+    try:
+        STATE_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[AVISO] nao foi possivel remover {STATE_FILE.name}: {e}")
+
+
 def main():
     maybe_run_interactive_menu()
     parser = argparse.ArgumentParser(prog="fair5gctl", add_help=True)
@@ -268,6 +313,7 @@ def main():
             raise SystemExit(1)
         log_file = out / "up.log"
         run_simple("sudo -v")
+        write_state(run_id, env["FAIR5G_SLICE_COUNT"], env.get("FAIR5G_CONFIG_DIR", ""))
         run_interactive_logged("./scripts/up_v0.sh", log_file, cwd=REPO_ROOT, env=env)
         print(f"[ok] run_id={run_id} logs={log_file}")
         return
@@ -279,6 +325,7 @@ def main():
         if args.keep_onos:
             env["FAIR5G_KEEP_ONOS"] = "1"
         run_simple("./scripts/down_v0.sh", cwd=REPO_ROOT, env=env)
+        clear_state()
         return
 
     if args.cmd == "status":
