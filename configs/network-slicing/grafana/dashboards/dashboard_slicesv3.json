@@ -1,23 +1,23 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
+  "title": "FAIR-5G \u2014 Isolamento de Fatias",
+  "uid": "open5gs-slice-monitor-v3",
   "editable": true,
-  "fiscalYearStartMonth": 0,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
   "graphTooltip": 1,
+  "tags": [
+    "5g",
+    "open5gs",
+    "network-slicing",
+    "load-test"
+  ],
   "links": [
     {
       "asDropdown": true,
@@ -35,6 +35,25 @@
       "url": ""
     }
   ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
       "collapsed": false,
@@ -46,222 +65,23 @@
       },
       "id": 1,
       "title": "Status Geral",
-      "type": "row"
+      "type": "row",
+      "panels": []
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "FALHOU"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "OK"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
+      "title": "UEs no AMF (RAN)",
+      "type": "stat",
+      "id": 4,
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 6,
         "x": 0,
         "y": 1
       },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}",
-          "instant": true,
-          "legendFormat": "UE1",
-          "refId": "A"
-        }
-      ],
-      "title": "Probe — UE1 ($target_ue1)",
-      "type": "stat"
-    },
-    {
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "FALHOU"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "OK"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 1
-      },
-      "id": 3,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}",
-          "instant": true,
-          "legendFormat": "UE2",
-          "refId": "A"
-        }
-      ],
-      "title": "Probe — UE2 ($target_ue2)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 1
-      },
-      "id": 4,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.0",
       "targets": [
         {
           "datasource": {
@@ -270,45 +90,11 @@
           },
           "editorMode": "code",
           "expr": "ran_ue{job=\"amf\"}",
-          "instant": true,
           "legendFormat": "UEs RAN",
+          "instant": true,
           "refId": "A"
         }
       ],
-      "title": "UEs no AMF (RAN)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 1
-      },
-      "id": 5,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -321,11 +107,41 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.0",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "UEs Ativos",
+      "type": "stat",
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
           "datasource": {
@@ -334,25 +150,30 @@
           },
           "editorMode": "code",
           "expr": "ues_active",
-          "instant": true,
           "legendFormat": "UEs Ativos",
+          "instant": true,
           "refId": "A"
         }
       ],
-      "title": "UEs Ativos",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -365,14 +186,35 @@
           "unit": "none"
         },
         "overrides": []
-      },
+      }
+    },
+    {
+      "title": "Sessoes AMF",
+      "type": "stat",
+      "id": 6,
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 1
       },
-      "id": 6,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "amf_session{job=\"amf\"}",
+          "legendFormat": "Sessoes AMF",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -385,11 +227,41 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.0",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "gNBs Conectados",
+      "type": "stat",
+      "id": 7,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
       "targets": [
         {
           "datasource": {
@@ -397,26 +269,31 @@
             "uid": "open5gsmetrics"
           },
           "editorMode": "code",
-          "expr": "amf_session{job=\"amf\"}",
+          "expr": "gnb{job=\"amf\"}",
+          "legendFormat": "gNBs",
           "instant": true,
-          "legendFormat": "Sessoes AMF",
           "refId": "A"
         }
       ],
-      "title": "Sessoes AMF",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -433,274 +310,35 @@
           "unit": "none"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 20,
-        "y": 1
-      },
-      "id": 7,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "gnb{job=\"amf\"}",
-          "instant": true,
-          "legendFormat": "gNBs",
-          "refId": "A"
-        }
-      ],
-      "title": "gNBs Conectados",
-      "type": "stat"
+      }
     },
     {
+      "id": 50,
+      "type": "row",
+      "title": "Conectividade e Latencia por UE",
       "collapsed": false,
+      "panels": [],
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 5
-      },
-      "id": 8,
-      "title": "Perda de Pacotes",
-      "type": "row"
+      }
     },
     {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Probe por UE (1 = alcancavel)",
+      "description": "Uma serie por UE provisionado, descoberta automaticamente pelos alvos do job blackbox. Escala com --ues-per-slice sem edicao do painel.",
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 6
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "(1 - avg_over_time(probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue1\"}[30s])) * 100",
-          "legendFormat": "UE1 ($target_ue1)",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "(1 - avg_over_time(probe_success{job=\"blackbox-ping-slices\", instance=\"$target_ue2\"}[30s])) * 100",
-          "legendFormat": "UE2 ($target_ue2)",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Perda de Pacotes — UE1 vs UE2 (%)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 14
-      },
-      "id": 10,
-      "title": "Latencia",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "log": 10,
-              "type": "log"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0.01,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 2
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "y": 6
       },
       "targets": [
         {
@@ -708,104 +346,52 @@
             "type": "prometheus",
             "uid": "open5gsmetrics"
           },
-          "editorMode": "code",
-          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"} * 1000",
-          "legendFormat": "RTT ICMP",
-          "range": true,
-          "refId": "B"
+          "expr": "probe_success{job=\"blackbox-ping-slices\"}",
+          "legendFormat": "{{ue}} (fatia {{slice}})",
+          "refId": "A"
         }
       ],
-      "title": "RTT ICMP (ms) — UE1 ($target_ue1)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
+      "id": 46,
+      "type": "timeseries",
+      "title": "Perda de pacotes por UE (%)",
+      "description": "Fracao de sondagens sem resposta em janela de 30s.",
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "log": 10,
-              "type": "log"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0.01,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 2
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 15
-      },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "y": 6
       },
       "targets": [
         {
@@ -813,104 +399,52 @@
             "type": "prometheus",
             "uid": "open5gsmetrics"
           },
-          "editorMode": "code",
-          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"} * 1000",
-          "legendFormat": "RTT ICMP",
-          "range": true,
-          "refId": "B"
+          "expr": "(1 - avg_over_time(probe_success{job=\"blackbox-ping-slices\"}[30s])) * 100",
+          "legendFormat": "{{ue}} (fatia {{slice}})",
+          "refId": "A"
         }
       ],
-      "title": "RTT ICMP (ms) — UE2 ($target_ue2)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
+      "id": 47,
+      "type": "timeseries",
+      "title": "RTT ICMP por UE (ms)",
+      "description": "Metrica OFICIAL de latencia: fase 'rtt' do blackbox exporter, ou seja, o round-trip do pacote ICMP. Nao usar probe_duration_seconds, que soma resolucao de nome e preparacao de socket ao RTT e portanto mede o custo da instrumentacao junto com a rede. Escala log para acomodar a cauda.",
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 5,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "log": 10,
-              "type": "log"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0.01,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 2
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 23
-      },
-      "id": 13,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "y": 14
       },
       "targets": [
         {
@@ -918,127 +452,175 @@
             "type": "prometheus",
             "uid": "open5gsmetrics"
           },
-          "editorMode": "code",
-          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"} * 1000",
-          "legendFormat": "UE1 ($target_ue1)",
-          "range": true,
+          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", phase=\"rtt\"} * 1000",
+          "legendFormat": "{{ue}} (fatia {{slice}})",
           "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
+          }
         },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 48,
+      "type": "timeseries",
+      "title": "Jitter do RTT por UE \u2014 janela de 30s (ms)",
+      "description": "Desvio padrao do RTT na janela; reage rapido a instabilidade.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "open5gsmetrics"
           },
-          "editorMode": "code",
-          "expr": "probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"} * 1000",
-          "legendFormat": "UE2 ($target_ue2)",
-          "range": true,
-          "refId": "B"
+          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", phase=\"rtt\"}[30s]) * 1000",
+          "legendFormat": "{{ue}} (fatia {{slice}})",
+          "refId": "A"
         }
       ],
-      "title": "Comparacao de RTT ICMP — UE1 vs UE2 (ms)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
-      "collapsed": false,
+      "id": 49,
+      "type": "timeseries",
+      "title": "Jitter do RTT por UE \u2014 janela de 2min (ms)",
+      "description": "Mesma medida em janela longa; suaviza picos isolados.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", phase=\"rtt\"}[2m]) * 1000",
+          "legendFormat": "{{ue}} (fatia {{slice}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 37,
+      "type": "row",
+      "title": "Recursos \u2014 Componentes COMPARTILHADOS (caminho de impacto entre fatias)",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 31
       },
-      "id": 14,
-      "title": "Jitter do RTT — UE1 vs UE2 (ms)",
-      "type": "row"
+      "collapsed": false,
+      "panels": []
     },
     {
+      "id": 38,
+      "type": "timeseries",
+      "title": "CPU \u2014 componentes compartilhados (%)",
+      "description": "gNB, AMF, NRF e ONOS sao unicos para todas as fatias. Se a carga em uma fatia satura a CPU de qualquer um deles, as demais degradam por consequencia \u2014 este e o mecanismo de falha de isolamento sob investigacao. Saturacao aqui INVALIDA conclusoes de isolamento de rede.",
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "log": 10,
-              "type": "log"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0.01,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.5
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 32
-      },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
       },
       "targets": [
         {
@@ -1046,116 +628,108 @@
             "type": "prometheus",
             "uid": "open5gsmetrics"
           },
-          "editorMode": "code",
-          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"}[30s]) * 1000",
-          "legendFormat": "UE1 — Jitter 30s",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue1\", phase=\"rtt\"}[2m]) * 1000",
-          "legendFormat": "UE1 — Jitter 2m (suavizado)",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"}[30s]) * 1000",
-          "legendFormat": "UE2 — Jitter 30s",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "stddev_over_time(probe_icmp_duration_seconds{job=\"blackbox-ping-slices\", instance=\"$target_ue2\", phase=\"rtt\"}[2m]) * 1000",
-          "legendFormat": "UE2 — Jitter 2m (suavizado)",
-          "range": true,
-          "refId": "D"
+          "refId": "A",
+          "legendFormat": "{{name}}",
+          "expr": "fair5g_container_cpu_percent{name=~\"gnb|amf|nrf|onos-controller\"}"
         }
       ],
-      "title": "Jitter do RTT — UE1 vs UE2 (ms)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "collapsed": false,
+      "id": 39,
+      "type": "timeseries",
+      "title": "Memoria \u2014 componentes compartilhados (MiB)",
+      "description": "working_set_bytes e a memoria nao-descartavel; e a referencia usada pelo OOM killer.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "refId": "A",
+          "legendFormat": "{{name}}",
+          "expr": "fair5g_container_memory_bytes{name=~\"gnb|amf|nrf|onos-controller\"} / 1024 / 1024"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Recursos \u2014 Componentes POR FATIA (verificacao do efeito localizado)",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 40
       },
-      "id": 16,
-      "title": "Plano de Controle — AMF",
-      "type": "row"
+      "collapsed": false,
+      "panels": []
     },
     {
+      "id": 41,
+      "type": "timeseries",
+      "title": "CPU \u2014 UPF por fatia (%)",
+      "description": "Confirma que a perturbacao chegou na fatia pretendida. Se a fatia perturbada nao mostra carga aqui, o estimulo nao surtiu efeito e o experimento e invalido.",
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1163,22 +737,221 @@
         "x": 0,
         "y": 41
       },
-      "id": 17,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "expr": "fair5g_container_cpu_percent{name=~\"upf[0-9]+\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
-          "calcs": [
-            "last",
-            "mean",
-            "max"
-          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+          "mode": "multi"
         }
+      }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "CPU \u2014 SMF por fatia (%)",
+      "description": "Plano de sessao por fatia; relevante em ataques de sinalizacao.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "expr": "fair5g_container_cpu_percent{name=~\"smf[0-9]+\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 43,
+      "type": "timeseries",
+      "title": "CPU \u2014 UE emulado por fatia (%)",
+      "description": "O processo nr-ue do UERANSIM e single-thread. Saturacao de um nucleo aqui limita o throughput da fatia independentemente de folga no host.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "expr": "fair5g_container_cpu_percent{name=~\"mn.ue[0-9]+\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Memoria \u2014 UPF por fatia (MiB)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "expr": "fair5g_container_memory_bytes{name=~\"upf[0-9]+\"} / 1024 / 1024",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
+      "id": 16,
+      "title": "Plano de Controle \u2014 AMF",
+      "type": "row",
+      "panels": []
+    },
+    {
+      "title": "AMF \u2014 Taxa de Registro Inicial (Req/s)",
+      "type": "timeseries",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -1226,41 +999,17 @@
           "refId": "D"
         }
       ],
-      "title": "AMF — Taxa de Registro Inicial (Req/s)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -1271,7 +1020,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1280,49 +1028,10 @@
                 "value": null
               }
             ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Rejeitadas"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Falhas"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
           }
-        ]
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 41
-      },
-      "id": 18,
       "options": {
         "legend": {
           "calcs": [
@@ -1338,6 +1047,21 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "title": "AMF \u2014 Autenticacao (Req/s)",
+      "type": "timeseries",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -1374,41 +1098,17 @@
           "refId": "C"
         }
       ],
-      "title": "AMF — Autenticacao (Req/s)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -1419,7 +1119,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1428,22 +1127,46 @@
                 "value": null
               }
             ]
-          },
-          "unit": "none"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rejeitadas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Falhas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 49
-      },
-      "id": 20,
       "options": {
         "legend": {
           "calcs": [
             "last",
+            "mean",
             "max"
           ],
           "displayMode": "table",
@@ -1454,6 +1177,21 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "title": "AMF \u2014 Assinantes Registrados",
+      "type": "timeseries",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -1490,53 +1228,17 @@
           "refId": "C"
         }
       ],
-      "title": "AMF — Assinantes Registrados",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 57
-      },
-      "id": 21,
-      "title": "Plano de Controle — SMF (por Slice)",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "none",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -1547,7 +1249,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1556,23 +1257,14 @@
                 "value": null
               }
             ]
-          },
-          "unit": "reqps"
+          }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 58
-      },
-      "id": 22,
       "options": {
         "legend": {
           "calcs": [
             "last",
-            "mean",
             "max"
           ],
           "displayMode": "table",
@@ -1583,6 +1275,34 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
+      "id": 21,
+      "title": "Plano de Controle \u2014 SMF (por Slice)",
+      "type": "row",
+      "panels": []
+    },
+    {
+      "title": "SMF \u2014 Sessoes PDU: Requisicoes vs Sucesso (por Slice)",
+      "type": "timeseries",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -1592,7 +1312,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationreq{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice1 — Req/s",
+          "legendFormat": "Slice1 \u2014 Req/s",
           "range": true,
           "refId": "A"
         },
@@ -1603,7 +1323,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationsucc{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice1 — Succ/s",
+          "legendFormat": "Slice1 \u2014 Succ/s",
           "range": true,
           "refId": "B"
         },
@@ -1614,7 +1334,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationreq{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice2 — Req/s",
+          "legendFormat": "Slice2 \u2014 Req/s",
           "range": true,
           "refId": "C"
         },
@@ -1625,46 +1345,22 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_pdusessioncreationsucc{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice2 — Succ/s",
+          "legendFormat": "Slice2 \u2014 Succ/s",
           "range": true,
           "refId": "D"
         }
       ],
-      "title": "SMF — Sessoes PDU: Requisicoes vs Sucesso (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -1675,7 +1371,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1684,18 +1379,10 @@
                 "value": null
               }
             ]
-          },
-          "unit": "reqps"
+          }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 58
-      },
-      "id": 23,
       "options": {
         "legend": {
           "calcs": [
@@ -1711,6 +1398,21 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "title": "SMF \u2014 N4 Session Establishment (por Slice)",
+      "type": "timeseries",
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -1720,7 +1422,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionestabreq{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice1 — N4 Estab Req/s",
+          "legendFormat": "Slice1 \u2014 N4 Estab Req/s",
           "range": true,
           "refId": "A"
         },
@@ -1731,7 +1433,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionestabreq{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice2 — N4 Estab Req/s",
+          "legendFormat": "Slice2 \u2014 N4 Estab Req/s",
           "range": true,
           "refId": "B"
         },
@@ -1742,7 +1444,7 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionreportsucc{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice1 — N4 Report Succ/s",
+          "legendFormat": "Slice1 \u2014 N4 Report Succ/s",
           "range": true,
           "refId": "C"
         },
@@ -1753,268 +1455,22 @@
           },
           "editorMode": "code",
           "expr": "rate(fivegs_smffunction_sm_n4sessionreportsucc{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}[1m])",
-          "legendFormat": "Slice2 — N4 Report Succ/s",
+          "legendFormat": "Slice2 \u2014 N4 Report Succ/s",
           "range": true,
           "refId": "D"
         }
       ],
-      "title": "SMF — N4 Session Establishment (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 66
-      },
-      "id": 24,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
-          "legendFormat": "Slice1 — Sessoes",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
-          "legendFormat": "Slice2 — Sessoes",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "SMF — Sessoes Ativas (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 66
-      },
-      "id": 25,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
-          "legendFormat": "Slice1 — QoS Flows",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
-          "legendFormat": "Slice2 — QoS Flows",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "SMF — QoS Flows Ativos (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 74
-      },
-      "id": 26,
-      "title": "PCF — Politicas de QoS",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -2025,7 +1481,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2034,18 +1489,10 @@
                 "value": null
               }
             ]
-          },
-          "unit": "reqps"
+          }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 75
-      },
-      "id": 27,
       "options": {
         "legend": {
           "calcs": [
@@ -2061,6 +1508,406 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "title": "SMF \u2014 Sessoes Ativas (por Slice)",
+      "type": "timeseries",
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 83
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
+          "legendFormat": "Slice1 \u2014 Sessoes",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_smffunction_sm_sessionnbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
+          "legendFormat": "Slice2 \u2014 Sessoes",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "title": "SMF \u2014 QoS Flows Ativos (por Slice)",
+      "type": "timeseries",
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 83
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf1.open5gs.org:9090\"}",
+          "legendFormat": "Slice1 \u2014 QoS Flows",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_smffunction_sm_qos_flow_nbr{job=\"smf\", instance=\"smf2.open5gs.org:9090\"}",
+          "legendFormat": "Slice2 \u2014 QoS Flows",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 91
+      },
+      "id": 29,
+      "title": "UPF \u2014 Plano de Dados",
+      "type": "row",
+      "panels": []
+    },
+    {
+      "title": "UPF \u2014 Sessoes Ativas (por Slice)",
+      "type": "timeseries",
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 92
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
+          "legendFormat": "UPF1 (Slice1) \u2014 Sessoes",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
+          "legendFormat": "UPF2 (Slice2) \u2014 Sessoes",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "pfcp_sessions_active",
+          "legendFormat": "PFCP Sessoes Ativas",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "title": "UPF \u2014 QoS Flows Ativos (por Slice)",
+      "type": "timeseries",
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 92
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
+          "legendFormat": "UPF1 (Slice1) \u2014 QoS Flows",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
+          "legendFormat": "UPF2 (Slice2) \u2014 QoS Flows",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "id": 26,
+      "title": "PCF \u2014 Politicas de QoS",
+      "type": "row",
+      "panels": []
+    },
+    {
+      "title": "PCF \u2014 AM Policy Association (Req/s)",
+      "type": "timeseries",
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -2086,41 +1933,17 @@
           "refId": "B"
         }
       ],
-      "title": "PCF — AM Policy Association (Req/s)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -2131,7 +1954,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2140,31 +1962,10 @@
                 "value": null
               }
             ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "PCF Sessoes Ativas"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              }
-            ]
           }
-        ]
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 75
-      },
-      "id": 28,
       "options": {
         "legend": {
           "calcs": [
@@ -2180,6 +1981,21 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "title": "PCF \u2014 SM Policy Association (Req/s)",
+      "type": "timeseries",
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -2216,53 +2032,17 @@
           "refId": "C"
         }
       ],
-      "title": "PCF — SM Policy Association (Req/s)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 83
-      },
-      "id": 29,
-      "title": "UPF — Plano de Dados",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
       "fieldConfig": {
         "defaults": {
+          "unit": "reqps",
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
+            "fillOpacity": 8,
             "lineWidth": 2,
             "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
@@ -2273,7 +2053,6 @@
               "mode": "off"
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2282,252 +2061,23 @@
                 "value": null
               }
             ]
-          },
-          "unit": "none"
+          }
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 84
-      },
-      "id": 30,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
-          "legendFormat": "UPF1 (Slice1) — Sessoes",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_upffunction_upf_sessionnbr{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
-          "legendFormat": "UPF2 (Slice2) — Sessoes",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "pfcp_sessions_active",
-          "legendFormat": "PFCP Sessoes Ativas",
-          "range": true,
-          "refId": "C"
-        }
-      ],
-      "title": "UPF — Sessoes Ativas (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PCF Sessoes Ativas"
             },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "unit",
+                "value": "none"
               }
             ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
+          }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 84
-      },
-      "id": 31,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf1.open5gs.org:9090\"}",
-          "legendFormat": "UPF1 (Slice1) — QoS Flows",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fivegs_upffunction_upf_qosflows{job=\"upf\", instance=\"upf2.open5gs.org:9090\"}",
-          "legendFormat": "UPF2 (Slice2) — QoS Flows",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "UPF — QoS Flows Ativos (por Slice)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 92
-      },
-      "id": 33,
-      "title": "Saude dos NFs",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 6,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 93
-      },
-      "id": 35,
       "options": {
         "legend": {
           "calcs": [
@@ -2543,6 +2093,34 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      },
+      "id": 33,
+      "title": "Saude dos NFs",
+      "type": "row",
+      "panels": []
+    },
+    {
+      "title": "NFs \u2014 Memoria RSS (bytes)",
+      "type": "timeseries",
+      "id": 35,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 110
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "open5gsmetrics"
       },
       "targets": [
         {
@@ -2557,13 +2135,97 @@
           "refId": "A"
         }
       ],
-      "title": "NFs — Memoria RSS (bytes)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 6,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
+      "title": "NFs \u2014 Status (up/down)",
+      "type": "stat",
+      "id": 36,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 118
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "open5gsmetrics"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "open5gsmetrics"
+          },
+          "editorMode": "code",
+          "expr": "up{job=~\"amf|smf|upf|pcf\"}",
+          "legendFormat": "{{job}} {{instance}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "textMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
@@ -2602,736 +2264,8 @@
           }
         },
         "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 101
-      },
-      "id": 36,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": true
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "up{job=~\"amf|smf|upf|pcf\"}",
-          "instant": true,
-          "legendFormat": "{{job}} {{instance}}",
-          "refId": "A"
-        }
-      ],
-      "title": "NFs — Status (up/down)",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 105
-      },
-      "id": 37,
-      "panels": [],
-      "title": "Recursos — Componentes COMPARTILHADOS (caminho de impacto entre fatias)",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "gNB, AMF, NRF e ONOS sao unicos para todas as fatias. Se a carga em uma fatia satura a CPU de qualquer um deles, as demais degradam por consequencia — este e o mecanismo de falha de isolamento sob investigacao. Saturacao aqui INVALIDA conclusoes de isolamento de rede.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 106
-      },
-      "id": 38,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "   fair5g_container_cpu_percent{name=~\"gnb|amf|nrf|onos-controller\"}",
-          "legendFormat": "{{name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "CPU — componentes compartilhados (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "working_set_bytes e a memoria nao-descartavel; e a referencia usada pelo OOM killer.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 106
-      },
-      "id": 39,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "editorMode": "code",
-          "expr": "fair5g_container_memory_bytes{name=~\"gnb|amf|nrf|onos-controller\"} / 1024 / 1024",
-          "legendFormat": "{{name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Memoria — componentes compartilhados (MiB)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 114
-      },
-      "id": 40,
-      "panels": [],
-      "title": "Recursos — Componentes POR FATIA (verificacao do efeito localizado)",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "Confirma que a perturbacao chegou na fatia pretendida. Se a fatia perturbada nao mostra carga aqui, o estimulo nao surtiu efeito e o experimento e invalido.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 115
-      },
-      "id": 41,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "expr": "fair5g_container_cpu_percent{name=~\"upf[0-9]+\"}",
-          "legendFormat": "{{name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU — UPF por fatia (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "Plano de sessao por fatia; relevante em ataques de sinalizacao.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 115
-      },
-      "id": 42,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "expr": "fair5g_container_cpu_percent{name=~\"smf[0-9]+\"}",
-          "legendFormat": "{{name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU — SMF por fatia (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "O processo nr-ue do UERANSIM e single-thread. Saturacao de um nucleo aqui limita o throughput da fatia independentemente de folga no host.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 123
-      },
-      "id": 43,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "expr": "fair5g_container_cpu_percent{name=~\"mn.ue[0-9]+\"}",
-          "legendFormat": "{{name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU — UE emulado por fatia (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "open5gsmetrics"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 123
-      },
-      "id": 44,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "open5gsmetrics"
-          },
-          "expr": "fair5g_container_memory_bytes{name=~\"upf[0-9]+\"} / 1024 / 1024",
-          "legendFormat": "{{name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Memoria — UPF por fatia (MiB)",
-      "type": "timeseries"
+      }
     }
   ],
-  "refresh": "10s",
-  "schemaVersion": 39,
-  "tags": [
-    "5g",
-    "open5gs",
-    "network-slicing",
-    "load-test"
-  ],
-  "templating": {
-    "list": [
-      {
-        "current": {
-          "selected": false,
-          "text": "10.34.0.200",
-          "value": "10.34.0.200"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "open5gsmetrics"
-        },
-        "definition": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "IP UE1",
-        "multi": false,
-        "name": "target_ue1",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 1,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "10.34.0.200",
-          "value": "10.34.0.200"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "open5gsmetrics"
-        },
-        "definition": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "IP UE2",
-        "multi": false,
-        "name": "target_ue2",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(probe_success{job=\"blackbox-ping-slices\"}, instance)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 1,
-        "type": "query"
-      }
-    ]
-  },
-  "time": {
-    "from": "now-15m",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "Open5GS — Monitoramento de Isolamento de Slices v3",
-  "uid": "open5gs-slice-monitor-v3",
-  "version": 1,
-  "weekStart": ""
+  "_fair5g_nota": "Latencia oficial = probe_icmp_duration_seconds{phase='rtt'}. probe_duration_seconds foi removida por agregar resolucao de nome e preparacao de socket ao RTT, medindo instrumentacao junto com rede."
 }
