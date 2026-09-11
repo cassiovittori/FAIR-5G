@@ -69,11 +69,26 @@ def _ue_ip_defaults() -> dict:
                 count = None
         if not count:
             count = DEFAULT_SLICE_COUNT
-        return {s.index: s.ue_mininet_ip for s in build_slice_specs(int(count))}
+        ues = None
+        try:
+            state_file = Path(__file__).resolve().parent.parent / ".fair5g_state.json"
+            ues = json.loads(state_file.read_text()).get("ues_per_slice")
+        except Exception:
+            pass
+        ues = os.environ.get("FAIR5G_UES_PER_SLICE") or ues
+        specs = build_slice_specs(int(count), ues)
+        # Mapa nome-do-UE -> IP de acesso. Com multiplos UEs por fatia a chave
+        # nao pode mais ser o indice da fatia.
+        global _UE_BY_NAME, _SPECS
+        _SPECS = specs
+        _UE_BY_NAME = {ue.name: ue.access_ip for s in specs for ue in s.ues}
+        return {s.index: s.ue_mininet_ip for s in specs}
     except Exception:
         return {}
 
 
+_UE_BY_NAME = {}
+_SPECS = []
 _UE_IPS = _ue_ip_defaults()
 UE1_IP = os.environ.get("UE1_IP", _UE_IPS.get(1, ""))
 UE2_IP = os.environ.get("UE2_IP", _UE_IPS.get(2, ""))
@@ -109,14 +124,18 @@ def _build_queries() -> dict:
     """
     indices = _slice_indices()
 
+    # Um probe por UE. Com multiplos UEs por fatia, medir apenas o primeiro
+    # esconderia justamente o efeito que interessa: a competicao entre UEs da
+    # mesma fatia pelo AMBR agregado dela.
     conectividade = {}
     latencia = {}
-    for i in indices:
-        ip = _UE_IPS.get(i, "")
-        conectividade[f"Probe fatia {i} (OK=1)"] = (
+    alvos = ([(ue.name, ue.access_ip) for s in _SPECS for ue in s.ues]
+             if _SPECS else [(f"ue{i}", _UE_IPS.get(i, "")) for i in indices])
+    for nome, ip in alvos:
+        conectividade[f"Probe {nome} (OK=1)"] = (
             f'probe_success{{job="blackbox-ping-slices", instance="{ip}"}}'
         )
-        latencia[f"Fatia {i} RTT ICMP"] = (
+        latencia[f"{nome} RTT ICMP"] = (
             f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", '
             f'instance="{ip}", phase="rtt"}} * 1000'
         )
@@ -168,6 +187,11 @@ def _build_queries() -> dict:
         recursos_fatia[f"Mem upf{i} (MiB)"] = (
             f'fair5g_container_memory_bytes{{name="upf{i}"}} / 1024 / 1024'
         )
+    for s_ in _SPECS:
+        for ue in s_.ues:
+            recursos_fatia[f"CPU {ue.name} (%)"] = (
+                f'fair5g_container_cpu_percent{{name="{ue.container}"}}'
+            )
 
     return {
         "Conectividade": conectividade,

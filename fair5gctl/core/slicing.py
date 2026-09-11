@@ -6,6 +6,17 @@ MIN_SLICE_COUNT = 1
 # do Open5GS/UERANSIM para esse campo nunca foram testados com letras — manter <=8 evita a ambiguidade.
 MAX_SLICE_COUNT = 8
 
+DEFAULT_UES_PER_SLICE = 1
+MIN_UES_PER_SLICE = 1
+# Cada UE e um container executando o processo nr-ue do UERANSIM, que e
+# single-thread e satura um nucleo sob carga (medido em 2026-09-10: ~100% de um
+# nucleo com iperf3 saturando o tunel). Em uma VM de 4 vCPUs, mais de ~4 UEs
+# transmitindo ao mesmo tempo saturam o hospedeiro, e a degradacao observada
+# passa a refletir contencao de CPU e nao comportamento de fatia — o que
+# invalidaria qualquer conclusao sobre isolamento. O teto abaixo e um limite de
+# seguranca metodologica, nao uma restricao tecnica do Open5GS.
+MAX_UES_PER_SLICE = 4
+
 # Perfis calibrados pela capacidade medida do ambiente emulado.
 #
 # Teto de throughput do plano de usuario de uma fatia, medido em 2026-09-10 com
@@ -46,17 +57,36 @@ _IMSI_PREFIX_10_99 = "12345678"
 
 
 @dataclass(frozen=True)
+class UESpec:
+    """Um equipamento de usuario dentro de uma fatia."""
+    slice_index: int
+    ue_index: int          # 1..N dentro da fatia
+    name: str              # ex.: "ue1_2" (fatia 1, segundo UE)
+    imsi: str
+    access_ip: str         # IP na rede de acesso (10.34.0.x)
+
+    @property
+    def container(self) -> str:
+        return f"mn.{self.name}"
+
+    @property
+    def config_file(self) -> str:
+        return f"{self.name}.yaml"
+
+
+@dataclass(frozen=True)
 class SliceSpec:
     index: int
     sst: int
     sd_hex: str
-    imsi: str
+    imsi: str              # IMSI do primeiro UE; mantido por compatibilidade
     upf_subnet: str
     upf_gateway: str
-    ue_mininet_ip: str
+    ue_mininet_ip: str     # IP do primeiro UE; mantido por compatibilidade
     qos_index: int
     ambr_down_mbps: int
     ambr_up_mbps: int
+    ues: tuple = ()        # tuple[UESpec], todos os UEs desta fatia
 
 
 def validate_slice_count(raw) -> int:
@@ -79,28 +109,114 @@ def _msin(index: int) -> str:
     return f"{_IMSI_PREFIX_10_99}{index:02d}"
 
 
-def build_slice_specs(count) -> list[SliceSpec]:
+def validate_ues_per_slice(raw, slice_count: int) -> list:
+    """Normaliza a quantidade de UEs por fatia.
+
+    Aceita:
+      - None            -> DEFAULT_UES_PER_SLICE em todas as fatias
+      - int / "3"       -> mesmo valor em todas as fatias
+      - "3,1" / [3, 1]  -> valor por fatia, na ordem dos indices
+
+    A forma por fatia existe porque os experimentos de isolamento precisam
+    concentrar carga em UMA fatia e observar a outra; uma distribuicao uniforme
+    nao consegue expressar esse cenario.
+    """
+    if raw is None:
+        return [DEFAULT_UES_PER_SLICE] * slice_count
+
+    if isinstance(raw, str) and "," in raw:
+        partes = [p.strip() for p in raw.split(",") if p.strip()]
+    elif isinstance(raw, (list, tuple)):
+        partes = list(raw)
+    else:
+        partes = [raw] * slice_count
+
+    if len(partes) == 1:
+        partes = partes * slice_count
+
+    if len(partes) != slice_count:
+        raise ValueError(
+            f"Quantidade de UEs informada para {len(partes)} fatia(s), "
+            f"mas foram solicitadas {slice_count} fatia(s)"
+        )
+
+    valores = []
+    for i, parte in enumerate(partes, start=1):
+        try:
+            n = int(parte)
+        except (TypeError, ValueError):
+            raise ValueError(f"Quantidade de UEs invalida para a fatia {i}: {parte!r}")
+        if n < MIN_UES_PER_SLICE or n > MAX_UES_PER_SLICE:
+            raise ValueError(
+                f"Fatia {i}: quantidade de UEs fora do intervalo "
+                f"[{MIN_UES_PER_SLICE}, {MAX_UES_PER_SLICE}]: {n}"
+            )
+        valores.append(n)
+    return valores
+
+
+def build_slice_specs(count, ues_per_slice=None) -> list[SliceSpec]:
+    """Monta as especificacoes de fatia, cada uma com seus N UEs.
+
+    Enderecamento e identidade dos UEs
+    ----------------------------------
+    Cada UE precisa de um IMSI unico (identidade do assinante no core) e de um IP
+    unico na rede de acesso. Com multiplos UEs por fatia o esquema antigo, que
+    derivava ambos do indice da fatia, deixa de servir. Aqui o UE k da fatia i
+    recebe um numero sequencial global, o que mantem IMSIs e IPs unicos
+    independentemente de como os UEs estejam distribuidos entre as fatias.
+
+    Limite de banda
+    ---------------
+    Todos os UEs de uma fatia compartilham o MESMO meter, portanto o AMBR do
+    perfil e AGREGADO por fatia, nao por UE. Isso segue a semantica de
+    Session-AMBR do 3GPP (o limite pertence a fatia) e e o que permite o cenario
+    em que um UE abusivo consome a banda dos demais da mesma fatia — caso
+    intra-slice relevante para o modelo de ameacas.
+    """
     count = validate_slice_count(count)
+    por_fatia = validate_ues_per_slice(ues_per_slice, count)
+
     specs = []
+    numero_global = 0  # garante IMSI e IP unicos entre todas as fatias
     for index in range(1, count + 1):
         profile = QOS_PROFILES[(index - 1) % len(QOS_PROFILES)]
         subnet_octet = _UPF_SUBNET_BASE_OCTET + index
-        ue_octet = _UE_ACCESS_BASE_OCTET + index
+
+        ues = []
+        for ue_index in range(1, por_fatia[index - 1] + 1):
+            numero_global += 1
+            ues.append(
+                UESpec(
+                    slice_index=index,
+                    ue_index=ue_index,
+                    name=f"ue{index}_{ue_index}" if por_fatia[index - 1] > 1 else f"ue{index}",
+                    imsi=f"00101{_msin(numero_global)}",
+                    access_ip=f"{_UE_ACCESS_PREFIX}.{_UE_ACCESS_BASE_OCTET + numero_global}",
+                )
+            )
+
         specs.append(
             SliceSpec(
                 index=index,
                 sst=1,
                 sd_hex=f"{index:06x}",
-                imsi=f"00101{_msin(index)}",
+                imsi=ues[0].imsi,
                 upf_subnet=f"10.{subnet_octet}.0.0/16",
                 upf_gateway=f"10.{subnet_octet}.0.1",
-                ue_mininet_ip=f"{_UE_ACCESS_PREFIX}.{ue_octet}",
+                ue_mininet_ip=ues[0].access_ip,
                 qos_index=profile["index"],
                 ambr_down_mbps=profile["ambr_down_mbps"],
                 ambr_up_mbps=profile["ambr_up_mbps"],
+                ues=tuple(ues),
             )
         )
     return specs
+
+
+def all_ues(specs) -> list:
+    """Lista plana de todos os UEs de todas as fatias, na ordem de criacao."""
+    return [ue for spec in specs for ue in spec.ues]
 
 
 def other_subnets(specs: list[SliceSpec], index: int) -> list[str]:

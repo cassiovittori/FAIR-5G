@@ -51,7 +51,8 @@ preclean
 cd "$REPO_ROOT"
 
 echo "[v0] Renderizando configs das $FAIR5G_SLICE_COUNT fatia(s)..."
-python3 "$REPO_ROOT/scripts/render_slice_configs.py" --slices "$FAIR5G_SLICE_COUNT"
+python3 "$REPO_ROOT/scripts/render_slice_configs.py" --slices "$FAIR5G_SLICE_COUNT" \
+  ${FAIR5G_UES_PER_SLICE:+--ues-per-slice "$FAIR5G_UES_PER_SLICE"}
 
 echo "[v0] Subindo Open5GS via compose file..."
 sudo docker compose \
@@ -75,6 +76,7 @@ export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
+  FAIR5G_UES_PER_SLICE="${FAIR5G_UES_PER_SLICE:-}" \
+  FAIR5G_DETACH="${FAIR5G_DETACH:-0}" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"
-

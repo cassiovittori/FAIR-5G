@@ -1,8 +1,10 @@
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from .core.slicing import (
     MIN_SLICE_COUNT,
     MAX_SLICE_COUNT,
     validate_slice_count,
+    validate_ues_per_slice,
 )
 
 def is_interactive_tty() -> bool:
@@ -191,6 +194,78 @@ def run_interactive_logged(cmd, log_path: Path, cwd=None, env=None):
     if rc != 0:
         raise SystemExit(rc)
 
+def run_background_logged(cmd, log_path: Path, cwd=None, env=None):
+    """Dispara o comando em segundo plano, gravando a saida no log.
+
+    Usado pelo modo --detach. A topologia do Containernet precisa de um processo
+    vivo para existir, mas esse processo nao precisa ocupar o terminal do
+    usuario: a saida vai para o arquivo de log da execucao e o prompt volta.
+
+    DETALHE IMPORTANTE — por que nao usamos start_new_session:
+    o cache de credencial do sudo no Ubuntu e vinculado ao terminal de controle
+    (tty_tickets). Um processo em sessao nova nao enxerga o ticket criado pelo
+    `sudo -v` e, sem terminal para pedir a senha, todo `sudo` interno falha.
+    Observado em 2026-09-10: o up abortou em "Docker Compose plugin nao
+    encontrado" porque o `sudo docker compose version` nao conseguiu autenticar.
+    Mantendo a mesma sessao e apenas um grupo de processos proprio (setpgrp), o
+    ticket continua valido e o processo sobrevive ao termino do CLI.
+
+    Retorna o objeto Popen para que o chamador detecte falha precoce.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if subprocess.call("command -v script >/dev/null 2>&1", shell=True) != 0:
+        print("[ERRO] comando 'script' nao encontrado. Instale: sudo apt-get install -y util-linux")
+        raise SystemExit(1)
+
+    script_cmd = f"script -q -f {str(log_path)} -c {repr(cmd)}"
+    saida = open(log_path.parent / "up.stdout.log", "ab")
+    return subprocess.Popen(
+        script_cmd,
+        cwd=str(cwd) if cwd else None,
+        env=env,
+        shell=True,
+        stdout=saida,
+        stderr=subprocess.STDOUT,
+        preexec_fn=os.setpgrp,
+    )
+
+
+def _aguardar_ambiente(proc, pid_file: Path, log_file: Path, limite: int = 600) -> bool:
+    """Espera a topologia ficar pronta, com indicador de progresso.
+
+    Falha rapido: se o processo do `up` morrer antes de a topologia registrar o
+    pid, aborta a espera e mostra o fim do log em vez de esperar o limite
+    inteiro em silencio. Um `up` que falha sem avisar faria um script de
+    campanha disparar medicoes contra um ambiente inexistente.
+    """
+    giro = "|/-\\"
+    for decorrido in range(limite):
+        if pid_file.exists():
+            sys.stdout.write("\r" + " " * 70 + "\r")
+            print(f"[ok] ambiente pronto em ~{decorrido}s "
+                  f"(topologia pid {pid_file.read_text().strip()})")
+            return True
+        if proc.poll() is not None:
+            sys.stdout.write("\r" + " " * 70 + "\r")
+            print(f"[ERRO] o processo de subida terminou (codigo {proc.returncode}) "
+                  f"sem deixar o ambiente pronto.")
+            print(f"       Ultimas linhas de {log_file}:\n")
+            try:
+                linhas = log_file.read_text(errors="replace").splitlines()
+                for l in linhas[-15:]:
+                    print(f"       {l}")
+            except Exception:
+                print("       (nao foi possivel ler o log)")
+            return False
+        sys.stdout.write(f"\r  {giro[decorrido % 4]} subindo ambiente... {decorrido}s")
+        sys.stdout.flush()
+        time.sleep(1)
+
+    sys.stdout.write("\r" + " " * 70 + "\r")
+    print(f"[AVISO] ambiente nao ficou pronto em {limite}s. Verifique {log_file}.")
+    return False
+
+
 def new_run_id():
     return datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
@@ -212,10 +287,12 @@ def runs_dir(run_id: str) -> Path:
 STATE_FILE = REPO_ROOT / ".fair5g_state.json"
 
 
-def write_state(run_id: str, slice_count: int, config_dir: str = "") -> None:
+def write_state(run_id: str, slice_count: int, config_dir: str = "",
+                ues_per_slice=None) -> None:
     payload = {
         "run_id": run_id,
         "slice_count": int(slice_count),
+        "ues_per_slice": ues_per_slice,
         "config_dir": config_dir,
         "started_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -258,6 +335,31 @@ def main():
         default=None,
         help=f"Quantidade de fatias a provisionar ({MIN_SLICE_COUNT}-{MAX_SLICE_COUNT}, padrão {DEFAULT_SLICE_COUNT})",
     )
+
+    p_up.add_argument(
+        "--ues-per-slice",
+        default=None,
+        help=("UEs por fatia. Um numero aplica a todas (ex.: 3) ou uma lista por "
+              "fatia (ex.: 3,1 = tres UEs na fatia 1 e um na fatia 2). A lista "
+              "permite concentrar carga em uma fatia e observar a outra, cenario "
+              "necessario para os experimentos de isolamento. Maximo 4 por fatia."),
+    )
+    p_up.add_argument(
+        "--detach",
+        action="store_true",
+        help=("Mantem o ambiente no ar sem abrir a CLI interativa do Containernet. "
+              "Necessario para campanhas experimentais automatizadas, onde nao ha "
+              "terminal humano segurando a topologia. Use './fair5g exec' para "
+              "rodar comandos nos UEs e './fair5g down' para encerrar."),
+    )
+
+    p_exec = sub.add_parser(
+        "exec",
+        help="Executa um comando dentro de um UE (equivale ao prompt do Containernet)",
+    )
+    p_exec.add_argument("ue", help="Nome do UE, ex.: ue1")
+    p_exec.add_argument("comando", nargs=argparse.REMAINDER,
+                        help="Comando a executar dentro do UE")
 
     p_down = sub.add_parser("down", help="Derruba Open5GS e limpa mininet/containernet")
     p_down.add_argument("--wipe", action="store_true")
@@ -311,12 +413,55 @@ def main():
         except ValueError as e:
             print(f"[ERRO] {e}")
             raise SystemExit(1)
+        if args.ues_per_slice:
+            try:
+                validate_ues_per_slice(args.ues_per_slice, int(env["FAIR5G_SLICE_COUNT"]))
+            except ValueError as e:
+                print(f"[ERRO] {e}")
+                raise SystemExit(1)
+            env["FAIR5G_UES_PER_SLICE"] = str(args.ues_per_slice)
         log_file = out / "up.log"
         run_simple("sudo -v")
-        write_state(run_id, env["FAIR5G_SLICE_COUNT"], env.get("FAIR5G_CONFIG_DIR", ""))
+        detach = getattr(args, "detach", False)
+        if detach:
+            env["FAIR5G_DETACH"] = "1"
+        write_state(run_id, env["FAIR5G_SLICE_COUNT"], env.get("FAIR5G_CONFIG_DIR", ""),
+                    env.get("FAIR5G_UES_PER_SLICE"))
+
+        if detach:
+            pid_file = REPO_ROOT / ".fair5g_topology.pid"
+            try:
+                pid_file.unlink()
+            except FileNotFoundError:
+                pass
+            proc = run_background_logged("./scripts/up_v0.sh", log_file, cwd=REPO_ROOT, env=env)
+            print(f"[detach] subindo em segundo plano — log: {log_file}")
+            pronto = _aguardar_ambiente(proc, pid_file, log_file)
+            if not pronto:
+                clear_state()
+                print("\n[detach] ambiente NAO esta no ar. "
+                      "Rode './fair5g down' para limpar residuos antes de tentar de novo.")
+                raise SystemExit(1)
+            print(f"[ok] run_id={run_id} logs={log_file}")
+            print("     comandos nos UEs: ./fair5g exec ue1 <comando>")
+            print("     encerrar:         ./fair5g down")
+            return
+
         run_interactive_logged("./scripts/up_v0.sh", log_file, cwd=REPO_ROOT, env=env)
         print(f"[ok] run_id={run_id} logs={log_file}")
         return
+
+    if args.cmd == "exec":
+        if not args.comando:
+            print("[ERRO] informe o comando. Ex.: ./fair5g exec ue1 ping -c 3 10.45.0.1")
+            raise SystemExit(2)
+        container = args.ue if args.ue.startswith("mn.") else f"mn.{args.ue}"
+        cmd = " ".join(args.comando)
+        # -t apenas quando ha terminal, para nao quebrar uso em script/pipe.
+        flags = "-it" if sys.stdin.isatty() and sys.stdout.isatty() else "-i"
+        rc = subprocess.call(f"sudo docker exec {flags} {container} sh -lc {shlex.quote(cmd)}",
+                             shell=True)
+        raise SystemExit(rc)
 
     if args.cmd == "down":
         env = os.environ.copy()
@@ -324,6 +469,29 @@ def main():
             env["FAIR5G_WIPE"] = "1"
         if args.keep_onos:
             env["FAIR5G_KEEP_ONOS"] = "1"
+        # Se o ambiente subiu em modo desacoplado, sinaliza o processo da
+        # topologia ANTES de derrubar o compose: assim a limpeza do Containernet
+        # (switch, links, hosts, veth e iptables) roda pelo mesmo caminho do modo
+        # interativo, evitando containers mn.* e interfaces orfas.
+        pid_file = REPO_ROOT / ".fair5g_topology.pid"
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                print(f"[down] sinalizando topologia desacoplada (pid {pid})...")
+                subprocess.call(f"sudo kill -TERM {pid}", shell=True)
+                for _ in range(30):
+                    if subprocess.call(f"sudo kill -0 {pid} 2>/dev/null", shell=True) != 0:
+                        break
+                    time.sleep(1)
+                else:
+                    print("[AVISO] topologia nao encerrou em 30s; seguindo com a limpeza.")
+            except Exception as e:
+                print(f"[AVISO] falha ao sinalizar a topologia: {e}")
+            finally:
+                try:
+                    pid_file.unlink()
+                except Exception:
+                    pass
         run_simple("./scripts/down_v0.sh", cwd=REPO_ROOT, env=env)
         clear_state()
         return
