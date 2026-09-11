@@ -14,6 +14,10 @@ scrape_configs:
   - job_name: upf
     static_configs:
       - targets: [{% for slice in slices %}"upf{{ slice.index }}.open5gs.org:9090"{% if not loop.last %}, {% endif %}{% endfor %}]
+  - job_name: statsexporter
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["statsexporter:9200"]
   - job_name: 'blackbox-ping-slices'
     metrics_path: /probe
     params:

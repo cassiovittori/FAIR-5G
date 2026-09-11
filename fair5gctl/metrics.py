@@ -141,6 +141,34 @@ def _build_queries() -> dict:
             f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}[1m])'
         )
 
+    # Recursos por container (cAdvisor).
+    #
+    # A separacao entre COMPARTILHADOS e POR FATIA nao e cosmetica: os
+    # componentes compartilhados (gNB, AMF, ONOS) sao o caminho pelo qual um
+    # efeito atravessa de uma fatia para outra — se sobrecarregar a fatia 1
+    # satura a CPU do gNB, a fatia 2 degrada por consequencia, e isso e
+    # justamente o mecanismo de falha de isolamento sob investigacao. Os
+    # componentes por fatia servem de verificacao: confirmam que a perturbacao
+    # chegou onde se pretendia e permitem medir o efeito localizado.
+    recursos_compartilhados = {}
+    for nome in ("gnb", "amf", "onos-controller"):
+        recursos_compartilhados[f"CPU {nome} (%)"] = (
+            f'fair5g_container_cpu_percent{{name="{nome}"}}'
+        )
+        recursos_compartilhados[f"Mem {nome} (MiB)"] = (
+            f'fair5g_container_memory_bytes{{name="{nome}"}} / 1024 / 1024'
+        )
+
+    recursos_fatia = {}
+    for i in indices:
+        for nf in (f"upf{i}", f"smf{i}"):
+            recursos_fatia[f"CPU {nf} (%)"] = (
+                f'fair5g_container_cpu_percent{{name="{nf}"}}'
+            )
+        recursos_fatia[f"Mem upf{i} (MiB)"] = (
+            f'fair5g_container_memory_bytes{{name="upf{i}"}} / 1024 / 1024'
+        )
+
     return {
         "Conectividade": conectividade,
         "Latencia (ms)": latencia,
@@ -152,6 +180,8 @@ def _build_queries() -> dict:
         },
         "SMF": smf,
         "UPF": upf,
+        "Recursos (compartilhados)": recursos_compartilhados,
+        "Recursos (por fatia)": recursos_fatia,
     }
 
 
@@ -196,6 +226,10 @@ def _format_value(metric_name: str, value: Optional[float]) -> str:
         return "N/A"
     if "Probe" in metric_name:
         return "OK" if value == 1.0 else "FALHOU"
+    if "(%)" in metric_name:
+        return f"{value:.1f} %"
+    if "(MiB)" in metric_name:
+        return f"{value:.0f} MiB"
     if "ms" in metric_name or "Latencia" in metric_name or "RTT" in metric_name:
         return f"{value:.2f} ms"
     if "r/s" in metric_name or "p/s" in metric_name:

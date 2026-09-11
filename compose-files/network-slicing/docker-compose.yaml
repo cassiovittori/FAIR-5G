@@ -177,6 +177,32 @@ services:
       - amf
       - pcf
 
+  statsexporter:
+    container_name: statsexporter
+    build:
+      context: ../../images/statsexporter
+    image: "fair5g-statsexporter:1.0"
+    # Metricas de CPU/memoria/rede POR CONTAINER, lidas da API do Docker.
+    #
+    # Substitui o cAdvisor: o Docker 29 usa o driver de armazenamento
+    # "overlayfs", cujo layout o cAdvisor nao reconhece — ele coleta os cgroups
+    # mas nao consegue associa-los a nomes de container, saindo tudo rotulado
+    # por hash. Sem o nome nao ha como distinguir upf1 de upf2 e a analise por
+    # fatia fica inviavel. Verificado em 2026-09-10 com v0.49.1 e v0.52.1.
+    #
+    # A API do Docker sempre conhece o nome do container, entao esta abordagem
+    # independe do driver de armazenamento do hospedeiro — o que torna a
+    # FAIR-5G reproduzivel em ambientes heterogeneos.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      open5gs:
+        aliases:
+          - statsexporter.metrics.org
+    ports:
+      - "0.0.0.0:9200:9200/tcp"
+    restart: unless-stopped
+
   blackbox:
     image: prom/blackbox-exporter:latest
     container_name: blackbox
