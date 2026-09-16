@@ -16,6 +16,9 @@ from .core.slicing import (
     MAX_SLICE_COUNT,
     validate_slice_count,
     validate_ues_per_slice,
+    DEFAULT_UES_PER_SLICE,
+    MIN_UES_PER_SLICE,
+    MAX_UES_PER_SLICE,
 )
 
 def is_interactive_tty() -> bool:
@@ -65,6 +68,68 @@ def _menu_text(prompt: str, default: str = "") -> str:
         raw = input(f"{prompt} ").strip()
         return raw or default
 
+def _perguntar_ues_por_fatia(slices: int):
+    """Pergunta, de forma guiada, quantos UEs cada fatia deve ter.
+
+    O menu existe para quem nao quer decorar a sintaxe da linha de comando, entao
+    aqui a pergunta e conduzida em vez de exigir o formato "3,1": primeiro se a
+    quantidade e a mesma em todas as fatias e, se nao for, pergunta-se fatia a
+    fatia. Retorna a string no formato aceito por --ues-per-slice, ou None para
+    manter o padrao.
+
+    Toda funcionalidade precisa estar acessivel pelas DUAS interfaces (argumentos
+    e menu); do contrario a ferramenta passa a ter capacidades diferentes conforme
+    o modo de uso, e a documentacao vira meia verdade.
+    """
+    padrao = _menu_select(
+        f"Quantos UEs por fatia? (padrão: {DEFAULT_UES_PER_SLICE} por fatia)",
+        [
+            f"Manter o padrão ({DEFAULT_UES_PER_SLICE} por fatia)",
+            "Mesma quantidade em todas as fatias",
+            "Definir fatia a fatia",
+        ],
+    )
+
+    if padrao.startswith("Manter"):
+        return None
+
+    if padrao.startswith("Mesma"):
+        while True:
+            raw = _menu_text(
+                f"Quantidade de UEs em cada fatia "
+                f"[{MIN_UES_PER_SLICE}-{MAX_UES_PER_SLICE}]:",
+                default=str(DEFAULT_UES_PER_SLICE),
+            )
+            try:
+                validate_ues_per_slice(raw, slices)
+                return raw
+            except ValueError as e:
+                print(f"[ERRO] {e}")
+
+    valores = []
+    for i in range(1, slices + 1):
+        while True:
+            raw = _menu_text(
+                f"  Fatia {i} — quantidade de UEs "
+                f"[{MIN_UES_PER_SLICE}-{MAX_UES_PER_SLICE}]:",
+                default=str(DEFAULT_UES_PER_SLICE),
+            )
+            try:
+                n = int(raw)
+                if not (MIN_UES_PER_SLICE <= n <= MAX_UES_PER_SLICE):
+                    raise ValueError(
+                        f"fora do intervalo [{MIN_UES_PER_SLICE}, {MAX_UES_PER_SLICE}]"
+                    )
+                valores.append(str(n))
+                break
+            except ValueError as e:
+                print(f"[ERRO] {e}")
+
+    resumo = ", ".join(f"fatia {i}: {v} UE(s)" for i, v in enumerate(valores, 1))
+    print(f"  → {resumo}")
+    return ",".join(valores)
+
+
 def maybe_run_interactive_menu():
     force_menu = "--menu" in sys.argv
     if force_menu:
@@ -88,6 +153,7 @@ def maybe_run_interactive_menu():
             "logs (ver logs de um serviço)",
             "render (renderizar UE runtime)",
             "bootstrap (instalar dependências)",
+            "exec (executar comando dentro de um UE)",
             "metrics (monitoramento e métricas)",
             "tutorial (modo educacional guiado)",
             "sair",
@@ -99,6 +165,7 @@ def maybe_run_interactive_menu():
         cfg = _menu_text("Config dir (ENTER para padrão):", default="")
         if cfg:
             sys.argv += ["--config-dir", cfg]
+
         while True:
             raw_slices = _menu_text(
                 f"Quantidade de fatias [{MIN_SLICE_COUNT}-{MAX_SLICE_COUNT}] "
@@ -111,6 +178,22 @@ def maybe_run_interactive_menu():
             except ValueError as e:
                 print(f"[ERRO] {e}")
         sys.argv += ["--slices", str(slices)]
+
+        ues = _perguntar_ues_por_fatia(slices)
+        if ues:
+            sys.argv += ["--ues-per-slice", ues]
+        return
+
+    if choice.startswith("exec"):
+        alvo = _menu_text(
+            "Nome do UE (ex.: ue1, ou ue1_2 quando há vários na mesma fatia):",
+            default="ue1",
+        )
+        comando = _menu_text(
+            "Comando a executar dentro do UE:",
+            default="ping -I uesimtun0 -c 3 10.45.0.1",
+        )
+        sys.argv = [sys.argv[0], "exec", alvo] + comando.split()
         return
 
     if choice.startswith("down"):
