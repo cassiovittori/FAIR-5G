@@ -75,6 +75,7 @@ export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
+  FAIR5G_NO_CLI="${FAIR5G_NO_CLI:-}" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"
 

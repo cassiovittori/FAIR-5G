@@ -620,16 +620,20 @@ def run_topology():
             print(f'Ping básico: ue1 ping -c 3 {specs[1].ue_mininet_ip}')
         print('Verificar flows: ovs-ofctl dump-flows s1\n')
 
-        CLI(net)
+        if os.getenv("FAIR5G_NO_CLI") == "1":
+            print("Modo não-interativo (API) — ambiente segue rodando em background.")
+        else:
+            CLI(net)
 
     finally:
-        print("Limpando ambiente...")
-        try:
-            if net is not None:
-                net.stop()
-        except Exception:
-            pass
-        cleanup_host_artifacts()
+        if os.getenv("FAIR5G_NO_CLI") != "1":
+            print("Limpando ambiente...")
+            try:
+                if net is not None:
+                    net.stop()
+            except Exception:
+                pass
+            cleanup_host_artifacts()
 
 
 if __name__ == "__main__":

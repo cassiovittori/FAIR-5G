@@ -11,6 +11,13 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 log "Repo root detectado: $REPO_ROOT"
 
+FORCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --force|-f) FORCE=1 ;;
+  esac
+done
+
 if [[ ! -f "$REPO_ROOT/containernet/mininet/net.py" ]]; then
   log "Submodule containernet/ não inicializado — rodando git submodule update --init..."
   git -C "$REPO_ROOT" submodule update --init
@@ -87,7 +94,12 @@ else
 fi
 
 # Instalar dependências do Containernet via playbook local do repo (recomendado)
-if [[ -f "$REPO_ROOT/containernet/ansible/install.yml" ]]; then
+CONTAINERNET_OPENFLOW_DIR="$REPO_ROOT/openflow"
+
+if [[ "$FORCE" -eq 0 && -d "$CONTAINERNET_OPENFLOW_DIR" && $(command -v mn) ]]; then
+  log "Containernet/OpenFlow já instalados ($CONTAINERNET_OPENFLOW_DIR presente e 'mn' disponível). Pulando."
+  log "Use --force para reinstalar mesmo assim."
+elif [[ -f "$REPO_ROOT/containernet/ansible/install.yml" ]]; then
   log "Instalando dependências do Containernet (playbook local)..."
   sudo ansible-playbook -i "localhost," -c local "$REPO_ROOT/containernet/ansible/install.yml"
 else
