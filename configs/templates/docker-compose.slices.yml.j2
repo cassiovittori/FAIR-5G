@@ -17,7 +17,11 @@ services:
 
   upf{{ slice.index }}:
     container_name: upf{{ slice.index }}
-    image: "ghcr.io/borjis131/upf:${OPEN5GS_VERSION}"
+    image: "fair5g-upf:${OPEN5GS_VERSION}"
+    build:
+      context: ../../images/upf-tools
+      args:
+        - OPEN5GS_VERSION=${OPEN5GS_VERSION}
     command: "-c /etc/open5gs/custom/upf{{ slice.index }}.yaml"
     networks:
       open5gs:
