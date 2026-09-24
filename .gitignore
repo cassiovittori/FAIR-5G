@@ -34,3 +34,6 @@ tests/
 # node
 node_modules/
 dist/
+
+# database
+*.db
