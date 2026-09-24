@@ -4,11 +4,13 @@ import asyncio
 import shlex
 import time
 import shutil
+import psutil
 from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -23,6 +25,14 @@ app = FastAPI()
 REPO_ROOT = "/home/ubuntu/FAIR-5G"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 ALLOWED_SELF_SIGNUP_ROLES = {"pesquisador", "estudante", "instrutor"}
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -284,3 +294,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
 @app.get("/auth/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@app.get("/metrics/host")
+def host_metrics(current_user: User = Depends(get_current_user)):
+    return {
+        "cpu_percent": psutil.cpu_percent(interval=0.5),
+        "memory_percent": psutil.virtual_memory().percent,
+    }
