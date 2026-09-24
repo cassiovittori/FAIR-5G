@@ -19,27 +19,46 @@ MAX_UES_PER_SLICE = 4
 
 # Perfis calibrados pela capacidade medida do ambiente emulado.
 #
-# Teto de throughput do plano de usuario de uma fatia, medido em 2026-09-10 com
-# iperf3/TCP de UE1 ate a UPF1 e flows de prioridade 600 desviando uplink E
-# downlink para fora dos meters (controle): 12,7 Mbps, com dispersao de ~1,5%
-# em seis execucoes. Verificado que o valor NAO decorre do enforcement de QoS —
-# com os meters completamente contornados o resultado permanece identico, e os
-# contadores de banda dos meters ficam em zero. O gargalo tambem nao e CPU: o
-# processo nr-ue do UERANSIM opera em ~55% de um nucleo durante o teste.
-# Atribuido a implementacao da interface de tunel (uesimtun0) do UERANSIM.
+# TETO DO AMBIENTE: 8,3 Mbps no plano de usuario de uma fatia.
 #
-# Criterio de escolha dos valores: o perfil mais alto precisa ficar
-# suficientemente abaixo do teto para que a limitacao observada seja
-# ATRIBUIVEL ao meter e nao a capacidade do ambiente. Perfis proximos do teto
-# tornam o enforcement indistinguivel da limitacao natural e nao sustentam
-# afirmacao experimental.
+# Medido em 2026-09-23 com os meters da fatia integralmente contornados
+# (scripts/experiments/bypass_meters.py clona os flows de producao em
+# prioridade 600 sem a instrucao METER, cobrindo uplink E downlink). O controle
+# foi verificado no proprio switch, nao pela mensagem da ferramenta:
+#   - 31.029 pacotes pelo flow sem meter contra 26 pelo flow metrado;
+#   - contadores de banda do meter em zero (nenhum descarte durante o teste);
+#   - iperf3/TCP entregou 8,13 e 8,26 Mbps, ACIMA do meter de 8000 kbps.
+# Saturacao confirmada com UDP: oferecendo 20 Mbps chegam 8,33 Mbps; oferecendo
+# 40 Mbps chegam 8,34 Mbps. Dobrar a carga nao move o entregue — teto duro.
 #
-# Para experimentos de isolamento sob disputa, note que 4 fatias (8+3+8+3 =
-# 22 Mbps) ja excedem o teto de 12,7 Mbps, produzindo contencao sem exigir
-# geracao de trafego massiva.
+# LOCALIZACAO DO GARGALO: plano de usuario do UERANSIM, nao a camada SDN. No
+# mesmo teste o switch OpenFlow recebeu e encaminhou os 42,7 Mbps oferecidos
+# com drop=0 e errs=0 em todas as portas, enquanto o gNB emulado repassou ~20%
+# do que recebeu, sem erro de socket (RcvbufErrors=0) e a ~10% de um nucleo.
+# Nao e limitacao de CPU: acrescentar vCPU a VM nao desloca o teto.
+#
+# NOTA HISTORICA: uma medicao anterior (2026-09-10) registrou teto de 12,7 Mbps
+# e serviu de base para os perfis 8/3. Esse valor NAO reproduz e foi descartado.
+# O controle daquela ocasiao desviava apenas o uplink para fora dos meters,
+# deixando o downlink metrado — a medicao nunca foi livre de enforcement.
+#
+# CRITERIO DE ESCOLHA: a soma dos AMBRs de todas as fatias deve ficar em torno
+# de dois tercos do teto medido. Assim, quando todas as fatias saturam, cada uma
+# recebe o seu proprio AMBR e a distribuicao observada e ATRIBUIVEL aos meters.
+# Se a soma excedesse o teto, as fatias disputariam o gargalo do emulador, que
+# resolveria a contencao por conta propria — e nao haveria como separar o efeito
+# da politica do efeito do ambiente.
+#
+# Com 2 / 1 Mbps: 2 fatias somam 3 Mbps (36% do teto); 4 fatias, o maximo
+# previsto no tutorial, somam 6 Mbps (72%). Um unico conjunto de perfis atende a
+# todos os cenarios, sem recalibrar em funcao de N.
+#
+# O contraste que sustenta a afirmacao de isolamento e entre estes perfis e a
+# execucao de controle SEM meters, na qual uma fatia consome o teto inteiro e
+# priva as demais.
 QOS_PROFILES = [
-    {"index": 9, "ambr_down_mbps": 8, "ambr_up_mbps": 8},   # perfil tipo eMBB
-    {"index": 2, "ambr_down_mbps": 3, "ambr_up_mbps": 3},   # perfil tipo URLLC
+    {"index": 9, "ambr_down_mbps": 2, "ambr_up_mbps": 2},   # perfil tipo eMBB
+    {"index": 2, "ambr_down_mbps": 1, "ambr_up_mbps": 1},   # perfil tipo URLLC
 ]
 
 # Os UEs ficam na rede de ACESSO (10.34.0.0/24), separada da rede de transporte do
