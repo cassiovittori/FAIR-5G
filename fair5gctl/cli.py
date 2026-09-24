@@ -266,7 +266,14 @@ def run_interactive_logged(cmd, log_path: Path, cwd=None, env=None):
         print("[ERRO] comando 'script' não encontrado. Instale: sudo apt-get install -y util-linux")
         raise SystemExit(1)
 
-    script_cmd = f"script -q -f {str(log_path)} -c {repr(cmd)}"
+    # -e is essential: without it `script` exits with ITS OWN status,
+    # which is zero even when the wrapped command fails. That is why
+    # `up` reported "[ok]" after up_v0.sh had aborted with "Compose
+    # plugin not found" (observed twice on 2026-09-17). A bring-up that
+    # fails while reporting success is the worst kind of bug for
+    # measurement work: it lets a campaign collect data from an
+    # environment that was never fully up.
+    script_cmd = f"script -q -e -f {str(log_path)} -c {repr(cmd)}"
     print(f"[cmd] {script_cmd}")
     rc = subprocess.call(
         script_cmd,
