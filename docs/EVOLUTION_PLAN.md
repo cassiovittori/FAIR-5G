@@ -90,15 +90,8 @@ Arquivo: [open5gs/seed/subscribers.js](../open5gs/seed/subscribers.js)
 
 | Fatia | Perfil | 5QI | AMBR Down | AMBR Up |
 |-------|--------|-----|-----------|---------|
-| 1 (SD=000001) | eMBB | 9 | 2 Mbps | 2 Mbps |
-| 2 (SD=000002) | URLLC | 2 | 1 Mbps | 1 Mbps |
-
-> **Implementado.** A fonte da verdade e `QOS_PROFILES` em
-> [fair5gctl/core/slicing.py](../fair5gctl/core/slicing.py), que documenta a
-> calibracao. Os valores nao sao arbitrarios: derivam do teto de throughput
-> medido do ambiente emulado (8,3 Mbps), e a regra e manter a soma dos AMBRs de
-> todas as fatias em torno de dois tercos desse teto — assim a limitacao
-> observada e atribuivel ao meter, e nao a capacidade do emulador.
+| 1 (SD=000001) | eMBB | 9 | 100 Mbps | 50 Mbps |
+| 2 (SD=000002) | URLLC | 2 | 10 Mbps | 10 Mbps |
 
 O 5QI=2 mapeia para GBR com requisito de baixa latência segundo 3GPP TS 23.203 — sinalizando corretamente o perfil URLLC para o SMF/UPF.
 
@@ -107,8 +100,8 @@ O 5QI=2 mapeia para GBR com requisito de baixa latência segundo 3GPP TS 23.203 
 Via API do ONOS, após instalar os flows da Fase 1, adicionar meters para enforçar o AMBR no ponto de acesso da topologia Mininet:
 
 ```
-Meter 1 (Fatia 1 / eMBB):  rate=2000 kbps, drop-on-exceed
-Meter 2 (Fatia 2 / URLLC): rate=1000 kbps, drop-on-exceed
+Meter 1 (Fatia 1 / eMBB):  rate=100Mbps, burst=10MB
+Meter 2 (Fatia 2 / URLLC): rate=10Mbps,  burst=1MB, drop-on-exceed
 ```
 
 Associar cada meter às regras de forwarding do UE correspondente.
@@ -119,8 +112,7 @@ Os dashboards existentes em [configs/network-slicing/grafana/dashboards/](../con
 
 ### Critério de aceitação
 
-- `iperf3` de UE1 satura em ~2 Mbps; de UE2 em ~1 Mbps
-  (medido em 2026-09-24: 1,98 Mbps e 998 kbps — 99% do AMBR de cada fatia)
+- `iperf3` de UE1 satura em ~100 Mbps; de UE2 em ~10 Mbps
 - Dashboard `dashboard_slicesv3.json` exibe linhas divergentes por fatia
 - `ovs-ofctl dump-meters s1` lista os dois meters
 

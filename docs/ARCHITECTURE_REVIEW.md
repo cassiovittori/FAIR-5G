@@ -297,23 +297,15 @@ def install_slice_flows(onos_url, switch_dpid, ue1_ip, ue2_ip,
 deactivate_app_rest("org.onosproject.fwd", user, password)
 ```
 
-### Fase 2 — QoS diferenciado por fatia (implementada)
+### Fase 2 — QoS diferenciado por fatia (prioridade média)
 
 1. Alterar [open5gs/seed/subscribers.js](../open5gs/seed/subscribers.js) para diferenciar o AMBR por fatia:
-   - Fatia 1 (eMBB): AMBR 2 Mbps down / 2 Mbps up, 5QI=9
-   - Fatia 2 (URLLC): AMBR 1 Mbps down / 1 Mbps up, 5QI=2 (baixa latência)
-
-   Os valores vigentes e a justificativa da calibração estão em `QOS_PROFILES`
-   ([fair5gctl/core/slicing.py](../fair5gctl/core/slicing.py)); este documento
-   registra a decisão de projeto, não a configuração corrente.
+   - Fatia 1 (eMBB): AMBR 100 Mbps down / 50 Mbps up, 5QI=9
+   - Fatia 2 (URLLC): AMBR 10 Mbps down / 10 Mbps up, 5QI=2 (baixa latência)
 
 2. Adicionar OpenFlow meters no OVS via ONOS para enforcar os limites no plano de dados:
-   - Meter 1: bucket rate=2000 kbps (Fatia 1)
-   - Meter 2: bucket rate=1000 kbps (Fatia 2)
-
-   A unidade importa: meters OpenFlow criados com a flag `kbps` esperam a taxa
-   em KILOBITS por segundo. Converter para kilobytes tornava o enforcement 8x
-   mais restritivo que o AMBR pretendido.
+   - Meter 1: bucket rate=100Mbps (Fatia 1)
+   - Meter 2: bucket rate=10Mbps (Fatia 2)
 
 ### Fase 3 — NSSF ativo e app ONOS customizado (prioridade baixa)
 
