@@ -295,9 +295,21 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
 def me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+    with Session(engine) as session:
+        if not any_admin_exists(session):
+            admin_email = os.environ.get("FAIR5G_ADMIN_EMAIL", "admin@admin.com")
+            admin_password = os.environ.get("FAIR5G_ADMIN_PASSWORD", "admin000")
+            create_user(session, email=admin_email, password_hash=hash_password(admin_password), role="admin")
+            print(f"[auth] admin criado: {admin_email}")
+    psutil.cpu_percent()  # "aquece" o cálculo -- primeira leitura real vem só na próxima chamada
+
+
 @app.get("/metrics/host")
 def host_metrics(current_user: User = Depends(get_current_user)):
     return {
-        "cpu_percent": psutil.cpu_percent(interval=0.5),
+        "cpu_percent": psutil.cpu_percent(interval=None),
         "memory_percent": psutil.virtual_memory().percent,
     }

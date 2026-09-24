@@ -86,6 +86,7 @@ def maybe_run_interactive_menu():
             "bootstrap (instalar dependências)",
             "metrics (monitoramento e métricas)",
             "tutorial (modo educacional guiado)",
+            "interface (subir interface web: backend + frontend)",
             "sair",
         ],
     )
@@ -145,6 +146,10 @@ def maybe_run_interactive_menu():
 
     if choice.startswith("tutorial"):
         sys.argv = [sys.argv[0], "tutorial"]
+        return
+
+    if choice.startswith("interface"):
+        sys.argv = [sys.argv[0], "interface"]
         return
 
     raise SystemExit(0)
@@ -243,6 +248,13 @@ def main():
         help="Não abre o browser automaticamente (útil em ambientes headless)"
     )
 
+    p_interface = sub.add_parser("interface", help="Sobe a interface web (backend + frontend)")
+    p_interface.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Endereço de bind do backend/frontend (use 0.0.0.0 para expor na rede)",
+    )
+
     args = parser.parse_args()
 
     if args.cmd == "bootstrap":
@@ -315,4 +327,10 @@ def main():
 
         open_browser = not args.no_browser
         run_tutorial_mode(open_browser=open_browser)
+        return
+
+    if args.cmd == "interface":
+        from .web import run_web_interface
+
+        run_web_interface(host=args.host)
         return

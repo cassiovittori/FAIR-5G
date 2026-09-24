@@ -1,10 +1,11 @@
+import os
+
 from sqlmodel import SQLModel, create_engine, Session
 
 DATABASE_URL = "sqlite:///fair5g.db"
 
-# echo=True imprime o SQL gerado no terminal — útil pra ver o que o SQLModel
-# tá fazendo por baixo enquanto você pega o jeito; pode trocar pra False depois.
-engine = create_engine(DATABASE_URL, echo=True)
+# FAIR5G_SQL_ECHO=1 imprime o SQL gerado no terminal (útil pra debug).
+engine = create_engine(DATABASE_URL, echo=os.environ.get("FAIR5G_SQL_ECHO") == "1")
 
 
 def create_db_and_tables():

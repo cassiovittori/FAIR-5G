@@ -51,6 +51,17 @@ export default function PesquisadorHome() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        setMetrics(await hostMetrics())
+      } catch {
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const active = runs?.filter((r) => r.status === 'running') ?? []
   const recent = runs?.slice(0, 5) ?? []
 
