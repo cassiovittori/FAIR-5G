@@ -30,3 +30,7 @@ openflow/
 openflow/
 
 tests/
+
+# node
+node_modules/
+dist/
