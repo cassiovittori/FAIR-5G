@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import time
 import subprocess
 import json
@@ -27,6 +28,11 @@ from fair5gctl.core.slicing import (
     DEFAULT_SLICE_COUNT,
 )
 
+
+# Imagem do UE: por padrao a derivada local, que ja traz iperf3 e demais
+# ferramentas de trafego. FAIR5G_UE_IMAGE permite voltar a oficial quando as
+# ferramentas nao forem necessarias.
+UE_IMAGE = os.getenv("FAIR5G_UE_IMAGE", "fair5g-ue:v3.2.7")
 
 ACCESS_NETWORK = "fair5g-access"
 CORE_NETWORK = "open5gs"
@@ -296,23 +302,71 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
     rate_by_index = {s.index: meter_rate_kbps(s.ambr_down_mbps) for s in specs}
     burst_by_index = {s.index: max(int(rate_by_index[s.index] * 0.8192), 1) for s in specs}
 
+    # Aguarda a remocao dos meters anteriores antes de criar os novos: criar
+    # sobre um estado ainda sujo faz o ONOS reaproveitar identificadores que o
+    # switch ainda considera ocupados.
+    for _ in range(20):
+        atual = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+        if not atual.get("meters"):
+            break
+        time.sleep(0.5)
+
     print(f"Instalando {len(specs)} meters no switch {dpid}...")
+
+    # Criacao SERIALIZADA: cada meter e confirmado no ONOS antes do proximo.
+    #
+    # Disparar os POSTs em sequencia rapida gera condicao de corrida: o ONOS
+    # aloca o identificador sem esperar a confirmacao do anterior, e dois meters
+    # recebem o MESMO id. O switch instala o primeiro e rejeita o segundo por id
+    # duplicado, mas o ONOS registra o segundo como criado — ficando com uma
+    # visao divergente da do switch.
+    #
+    # Observado em 2026-09-23 com 2 fatias: o OVS mostrava meter id=1 com taxa
+    # 8000 kbps (fatia 1) enquanto o ONOS mostrava meter id=1 com taxa 3000 kbps
+    # (fatia 2). Efeito pratico: a fatia 1 ficava SEM enforcement e a fatia 2
+    # recebia um limite que nao era o seu — com o log anunciando sucesso.
+    vistos = set()
     for spec in specs:
+        taxa = rate_by_index[spec.index]
         payload = {
             "deviceId": dpid,
             "unit": "KB_PER_SEC",
             "burst": True,
             "bands": [{
                 "type": "DROP",
-                "rate": rate_by_index[spec.index],
+                "rate": taxa,
                 "burstSize": burst_by_index[spec.index],
             }],
         }
         result = _onos_request("POST", f"/onos/v1/meters/{dpid}", user, password, payload=payload)
         if result is None:
             print(f"[AVISO] POST meter da fatia {spec.index} falhou.")
+            continue
 
-    time.sleep(2)
+        # Confirma que ESTE meter apareceu antes de criar o proximo.
+        confirmado = None
+        for _ in range(20):
+            dados = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+            for m in dados.get("meters", []):
+                mid = m.get("id")
+                if mid in vistos:
+                    continue
+                for band in m.get("bands", []):
+                    if band.get("rate") == taxa:
+                        confirmado = mid
+                        break
+                if confirmado:
+                    break
+            if confirmado:
+                break
+            time.sleep(0.5)
+
+        if confirmado is None:
+            print(f"[AVISO] meter da fatia {spec.index} (taxa {taxa} kbps) nao foi "
+                  f"confirmado no ONOS apos 10s.")
+        else:
+            vistos.add(confirmado)
+
     meters_data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
     if not meters_data:
         print("[AVISO] Não foi possível obter IDs dos meters — flows sem QoS enforcement.")
@@ -358,6 +412,25 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
             f"[AVISO] {distintos} meter(s) distinto(s) para {len(specs)} fatia(s): "
             f"ha fatias compartilhando limite agregado."
         )
+
+    # Confere a visao do ONOS contra a do switch. As duas podem divergir (o ONOS
+    # registra como criado um meter que o switch rejeitou), e nesse caso o
+    # enforcement real e o do switch — o que o ONOS relata nao vale como
+    # evidencia.
+    try:
+        dump = run("ovs-ofctl -O OpenFlow13 dump-meters s1", check=False)
+        if dump.stdout:
+            taxas_switch = sorted(int(m) for m in re.findall(r"rate=(\d+)", dump.stdout))
+            taxas_esperadas = sorted(rate_by_index.values())
+            if taxas_switch != taxas_esperadas:
+                print(f"[AVISO] divergencia ONOS x switch — taxas no switch: "
+                      f"{taxas_switch} kbps, esperadas: {taxas_esperadas} kbps. "
+                      f"O enforcement efetivo e o do switch.")
+            else:
+                print(f"Meters confirmados no switch: {taxas_switch} kbps")
+    except Exception as e:
+        print(f"[AVISO] nao foi possivel conferir os meters no switch: {e}")
+
     return meter_ids
 
 
@@ -608,7 +681,7 @@ def run_topology():
                 ues[ue.name] = net.addDocker(
                     ue.name,
                     ip=f"{ue.access_ip}/24",
-                    dimage="ghcr.io/borjis131/ue:v3.2.7",
+                    dimage=UE_IMAGE,
                     privileged=True,
                     volumes=[f"{config_dir}:/UERANSIM/config:ro"],
                     dcmd="sleep infinity",
@@ -736,7 +809,45 @@ def run_topology():
             except Exception:
                 pass
         else:
-            CLI(net)
+            # Valida as pos-condicoes do ambiente ANTES de entregar o terminal.
+            #
+            # Aqui a saida sai em terminal normal e em ordem. Enquanto o verify era
+            # disparado pelo up_v0.sh, ele escrevia em paralelo com a CLI do
+            # Containernet, que ja havia posto o terminal em modo raw (cbreak): o
+            # '\n' deixava de voltar a coluna 0 e as linhas saiam escalonadas e
+            # intercaladas com o prompt.
+            #
+            # check=False de proposito: uma pos-condicao reprovada avisa, mas nao
+            # derruba a topologia — quem decide se os dados servem e o operador.
+            verificador = os.path.join(REPO_ROOT, "scripts", "verify_up.py")
+            if os.path.isfile(verificador):
+                # subprocess.run direto, nao o helper run(): aquele usa
+                # capture_output=True e engoliria o relatorio do verify.
+                subprocess.run(f"python3 {verificador}", shell=True)
+
+            roteiro = os.getenv("FAIR5G_CLI_SCRIPT") or ""
+            if roteiro and os.path.isfile(roteiro):
+                # Modo roteirizado: alimenta a CLI do Containernet com um arquivo
+                # de comandos em vez de esperar digitacao.
+                #
+                # E o que viabiliza campanha experimental sem depender de um
+                # terminal humano: o roteiro executa a bateria de medicoes e
+                # termina com `exit`, encerrando a topologia pelo mesmo caminho do
+                # modo interativo — mesma limpeza, mesmo estado final.
+                #
+                # A CLI aceita tanto comandos em hosts (`ue1_1 iperf3 ...`) quanto
+                # comandos no hospedeiro via `sh` (`sh sudo docker exec ...`), de
+                # modo que uma repeticao inteira cabe em um unico arquivo.
+                print(f"Executando roteiro: {roteiro}")
+                # Usa o parametro `script` da CLI, que le o arquivo e retorna ao
+                # final. Alimentar via stdin nao funcionaria: a CLI registra a
+                # entrada padrao em um poller, que exige descritor de arquivo real.
+                CLI(net, script=roteiro)
+                print("Roteiro concluido; encerrando a topologia.")
+            else:
+                if roteiro:
+                    print(f"[AVISO] roteiro nao encontrado: {roteiro}. Abrindo CLI interativa.")
+                CLI(net)
 
     finally:
         print("Limpando ambiente...")
