@@ -34,45 +34,45 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from fair5gctl.core.slicing import build_slice_specs  # noqa: E402
 
-# ── saida organizada (ver patch_verify_output.py) ────────────────────────────
-# O CLI do Mininet deixa o terminal em modo raw: '\n' nao volta a coluna 0 e a
-# saida sai escalonada, alem de se intercalar com o prompt. Acumulamos tudo e
-# despejamos num bloco unico com '\r\n' no final da execucao.
+# ── buffered report ──────────────────────────────────────────────────────────
+# Mininet's CLI leaves the terminal in raw mode: '\n' no longer returns to
+# column 0, so output comes out in a staircase and interleaves with the prompt.
+# Everything printed here is accumulated and flushed as one block with '\r\n'
+# at the end of the run. A single atomic write cannot interleave, and the '\r'
+# brings the cursor back to column 0 whatever mode the terminal is in.
 import atexit as _atexit
 import builtins as _builtins
 import io as _io
 
 _print_original = _builtins.print
-_relatorio = _io.StringIO()
-_LARGURA = 64
-_ARQUIVO_RELATORIO = "/tmp/fair5g_verify.txt"
+_report = _io.StringIO()
+_WIDTH = 64
+_REPORT_FILE = "/tmp/fair5g_verify.txt"
 
 
-def print(*args, **kwargs):  # noqa: A001 - sombreia o print do modulo de proposito
-    kwargs["file"] = _relatorio
+def print(*args, **kwargs):  # noqa: A001 - shadows the module's print on purpose
+    kwargs["file"] = _report
     kwargs.pop("flush", None)
     _print_original(*args, **kwargs)
 
 
-def _despejar_relatorio():
-    corpo = _relatorio.getvalue().splitlines()
-    if not corpo:
+def _flush_report():
+    body = _report.getvalue().splitlines()
+    if not body:
         return
-    borda = "=" * _LARGURA
-    linhas = ["", borda, "  VERIFICACAO DE POS-CONDICOES DO AMBIENTE", borda]
-    linhas += corpo
-    linhas += [borda, ""]
+    border = "=" * _WIDTH
+    lines = ["", border, "  ENVIRONMENT POST-CONDITION CHECKS", border]
+    lines += body
+    lines += [border, ""]
     try:
-        with open(_ARQUIVO_RELATORIO, "w") as fh:
-            fh.write("\n".join(linhas) + "\n")
+        with open(_REPORT_FILE, "w") as fh:
+            fh.write("\n".join(lines) + "\n")
     except OSError:
         pass
-    # '\r\n' porque o terminal pode estar em modo raw; escrita unica para nao
-    # se intercalar com o prompt do CLI.
-    _print_original("\r\n".join(linhas) + "\r\n", end="", flush=True)
+    _print_original("\r\n".join(lines) + "\r\n", end="", flush=True)
 
 
-_atexit.register(_despejar_relatorio)
+_atexit.register(_flush_report)
 # ─────────────────────────────────────────────────────────────────────────────
 
 ONOS_URL = "http://localhost:8181/onos/v1"
@@ -107,8 +107,8 @@ def check_containers(specs) -> tuple:
 
     missing = [c for c in expected if c not in running]
     if missing:
-        return False, f"containers ausentes: {', '.join(missing)}"
-    return True, f"{len(expected)} containers esperados em execucao"
+        return False, f"missing containers: {', '.join(missing)}"
+    return True, f"{len(expected)} expected containers running"
 
 
 PDU_TIMEOUT_S = int(os.getenv("FAIR5G_PDU_TIMEOUT", "90"))
@@ -131,26 +131,26 @@ def check_pdu_sessions(specs, timeout_s: int = None) -> tuple:
     if timeout_s is None:
         timeout_s = PDU_TIMEOUT_S
 
-    pendentes = [ue for spec in specs for ue in spec.ues]
-    limite = time.time() + timeout_s
+    pending = [ue for spec in specs for ue in spec.ues]
+    deadline = time.time() + timeout_s
     while True:
-        ainda = [
-            ue for ue in pendentes
+        still_pending = [
+            ue for ue in pending
             if "inet " not in _sh(
                 f"sudo docker exec {ue.container} "
                 f"ip addr show uesimtun0 2>/dev/null"
             )
         ]
-        pendentes = ainda
-        if not pendentes or time.time() >= limite:
+        pending = still_pending
+        if not pending or time.time() >= deadline:
             break
         time.sleep(2)
 
-    if pendentes:
-        nomes = ", ".join(ue.name for ue in pendentes)
-        return False, f"UEs sem sessao PDU apos {timeout_s}s: {nomes}"
+    if pending:
+        names = ", ".join(ue.name for ue in pending)
+        return False, f"UEs without a PDU session after {timeout_s}s: {names}"
     total = sum(len(s.ues) for s in specs)
-    return True, f"{total} UE(s) com sessao PDU ativa"
+    return True, f"{total} UE(s) with an active PDU session"
 
 
 def check_onos_switch() -> tuple:
@@ -163,15 +163,15 @@ def check_onos_switch() -> tuple:
     try:
         data = _onos_get("/devices")
     except Exception as e:
-        return False, f"ONOS inacessivel: {e}"
+        return False, f"ONOS unreachable: {e}"
 
     devices = data.get("devices", [])
     if not devices:
-        return False, "nenhum switch registrado no ONOS"
-    indisponiveis = [d.get("id") for d in devices if not d.get("available")]
-    if indisponiveis:
-        return False, f"switch indisponivel no ONOS: {indisponiveis}"
-    return True, f"{len(devices)} switch(es) disponivel(is) no ONOS"
+        return False, "no switch registered in ONOS"
+    unavailable = [d.get("id") for d in devices if not d.get("available")]
+    if unavailable:
+        return False, f"switch unavailable in ONOS: {unavailable}"
+    return True, f"{len(devices)} switch(es) available in ONOS"
 
 
 def check_meters(specs) -> tuple:
@@ -184,13 +184,13 @@ def check_meters(specs) -> tuple:
     try:
         data = _onos_get("/meters")
     except Exception as e:
-        return False, f"nao foi possivel consultar meters: {e}"
+        return False, f"could not query meters: {e}"
 
     ids = {m.get("id") for m in data.get("meters", [])}
     if len(ids) < len(specs):
-        return False, (f"{len(ids)} meter(s) distinto(s) para {len(specs)} "
-                       f"fatia(s): ha fatias compartilhando limite")
-    return True, f"{len(ids)} meter(s) distinto(s) instalado(s)"
+        return False, (f"{len(ids)} distinct meter(s) for {len(specs)} "
+                       f"slice(s): slices are sharing a limit")
+    return True, f"{len(ids)} distinct meter(s) installed"
 
 
 def check_prometheus() -> tuple:
@@ -204,16 +204,16 @@ def check_prometheus() -> tuple:
         with urllib.request.urlopen(f"{PROM_URL}/api/v1/targets", timeout=5) as r:
             data = json.loads(r.read())
     except Exception as e:
-        return False, f"Prometheus inacessivel: {e}"
+        return False, f"Prometheus unreachable: {e}"
 
-    alvos = data.get("data", {}).get("activeTargets", [])
-    if not alvos:
-        return False, "Prometheus sem alvos ativos"
-    caidos = [f"{t['labels'].get('job')}/{t['labels'].get('instance')}"
-              for t in alvos if t.get("health") != "up"]
-    if caidos:
-        return False, f"alvos fora do ar: {', '.join(caidos)}"
-    return True, f"{len(alvos)} alvo(s) do Prometheus no ar"
+    targets = data.get("data", {}).get("activeTargets", [])
+    if not targets:
+        return False, "Prometheus has no active targets"
+    down = [f"{t['labels'].get('job')}/{t['labels'].get('instance')}"
+            for t in targets if t.get("health") != "up"]
+    if down:
+        return False, f"targets down: {', '.join(down)}"
+    return True, f"{len(targets)} Prometheus target(s) up"
 
 
 def _onos_get(path: str) -> dict:
@@ -226,42 +226,42 @@ def _onos_get(path: str) -> dict:
 
 
 def main() -> int:
-    estrito = os.getenv("FAIR5G_STRICT") == "1"
+    strict = os.getenv("FAIR5G_STRICT") == "1"
     count = int(os.getenv("FAIR5G_SLICE_COUNT", "2"))
     ues = os.getenv("FAIR5G_UES_PER_SLICE") or None
     specs = build_slice_specs(count, ues)
 
-    verificacoes = [
+    checks = [
         ("containers", lambda: check_containers(specs)),
-        ("sessoes PDU", lambda: check_pdu_sessions(specs)),
-        ("switch no ONOS", check_onos_switch),
-        ("meters por fatia", lambda: check_meters(specs)),
+        ("PDU sessions", lambda: check_pdu_sessions(specs)),
+        ("switch in ONOS", check_onos_switch),
+        ("meters per slice", lambda: check_meters(specs)),
         ("Prometheus", check_prometheus),
     ]
 
-    print("\n[verify] Validando pos-condicoes do ambiente...")
-    falhas = []
-    for nome, fn in verificacoes:
+    print("\n[verify] Checking environment post-conditions...")
+    failures = []
+    for name, fn in checks:
         try:
-            ok, detalhe = fn()
+            ok, detail = fn()
         except Exception as e:
-            ok, detalhe = False, f"erro na verificacao: {e}"
-        marca = "OK  " if ok else "FALHA"
-        print(f"  [{marca}] {nome}: {detalhe}")
+            ok, detail = False, f"check raised an error: {e}"
+        mark = "OK  " if ok else "FAIL"
+        print(f"  [{mark}] {name}: {detail}")
         if not ok:
-            falhas.append(f"{nome}: {detalhe}")
+            failures.append(f"{name}: {detail}")
 
-    if not falhas:
-        print("[verify] ambiente validado.\n")
+    if not failures:
+        print("[verify] environment validated.\n")
         return 0
 
-    print(f"\n[verify] {len(falhas)} verificacao(oes) falhou(aram).")
-    if estrito:
-        print("[verify] modo estrito: o ambiente NAO esta apto para medicao.")
-        print("         Rode './fair5g down' antes de tentar novamente.\n")
+    print(f"\n[verify] {len(failures)} check(s) failed.")
+    if strict:
+        print("[verify] strict mode: the environment is NOT fit for measurement.")
+        print("         Run './fair5g down' before trying again.\n")
         return 1
-    print("[verify] modo tolerante: seguindo, mas os dados coletados agora\n"
-          "         nao sao confiaveis para analise.\n")
+    print("[verify] tolerant mode: continuing, but data collected now\n"
+          "         is not trustworthy for analysis.\n")
     return 0
 
 

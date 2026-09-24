@@ -1,38 +1,39 @@
 #!/usr/bin/env python3
-"""Instala/remove flows que desviam o trafego de uma fatia dos meters.
+"""Install/remove flows that divert a slice's traffic away from the meters.
 
-Serve ao experimento de controle do "teto do ambiente": medir a vazao maxima
-que a fatia alcanca quando NENHUM limite de QoS esta aplicado, para separar o
-que e limite configurado do que e limite do ambiente.
+This serves the "environment ceiling" control experiment: measuring the maximum
+throughput a slice reaches when NO QoS limit is applied, so that what is a
+configured limit can be told apart from what is an environment limit.
 
-COMO OS FLOWS DE BYPASS SAO MONTADOS
-------------------------------------
-Nao chutamos o seletor. O script LE a tabela de flows do ONOS, acha os flows de
-producao que carregam instrucao METER para a fatia alvo, e CLONA cada um deles
-em prioridade 600 removendo so o METER. O seletor do clone e byte a byte igual
-ao do original, entao o bypass casa exatamente o mesmo trafego que o flow
-metrado casava — nem mais, nem menos.
+HOW THE BYPASS FLOWS ARE BUILT
+------------------------------
+The selector is not guessed. The script READS the flow table from ONOS, finds
+the production flows carrying a METER instruction for the target slice, and
+CLONES each of them at priority 600 with only the METER removed. The clone's
+selector is byte for byte the original's, so the bypass matches exactly what the
+metered flow matched — no more, no less.
 
-A versao anterior deste script montava o seletor a mao com o IP do tunel
-(10.45.0.2). Esse IP nao aparece no switch: o trafego do uesimtun0 sobe
-encapsulado em GTP-U entre o IP de acesso da UE (10.34.0.x) e o gNB. Os flows
-de producao casam `ue_mininet_ip`, nao o IP do tunel. Resultado: o bypass nao
-casava nada, a medicao continuava metrada, e o numero medido nao valia.
+An earlier version of this script built the selector by hand from the tunnel IP
+(10.45.0.2). That address never appears on the switch: uesimtun0 traffic goes up
+encapsulated in GTP-U between the UE's access address (10.34.0.x) and the gNB.
+The production flows match `ue_mininet_ip`, not the tunnel address. The result
+was a bypass that matched nothing, a measurement that was still metered, and a
+number that meant nothing.
 
-DUAS DIRECOES. O trafego TCP do iperf3 passa pelo switch nos dois sentidos: os
-dados sobem (UE -> core) e os ACKs descem (core -> UE). O flow de downlink
-tambem carrega METER. Clonar so o uplink deixa os ACKs metrados e o teste
-continua limitado — foi o erro da primeira tentativa deste experimento. Como o
-script clona TODO flow com METER da fatia, as duas direcoes vem junto.
+BOTH DIRECTIONS. An iperf3 TCP run crosses the switch both ways: data goes up
+(UE -> core) and ACKs come down (core -> UE). The downlink flow also carries a
+METER. Cloning the uplink alone leaves the ACKs metered and the test stays
+limited — that was the mistake in the first attempt at this experiment. Because
+the script clones EVERY metered flow of the slice, both directions come along.
 
-Uso (na raiz do repositorio, com o ambiente no ar):
+Usage (from the repository root, with the environment up):
 
-    sudo python3 scripts/bypass_meters.py flows     # o que carrega trafego hoje
-    sudo python3 scripts/bypass_meters.py status    # contadores dos meters
-    sudo python3 scripts/bypass_meters.py on
-    ... rode o iperf3 ...
-    sudo python3 scripts/bypass_meters.py status    # meters devem estar parados
-    sudo python3 scripts/bypass_meters.py off
+    sudo python3 scripts/experiments/bypass_meters.py flows    # what carries traffic now
+    sudo python3 scripts/experiments/bypass_meters.py status   # meter counters
+    sudo python3 scripts/experiments/bypass_meters.py on
+    ... run iperf3 ...
+    sudo python3 scripts/experiments/bypass_meters.py status   # meters must be idle
+    sudo python3 scripts/experiments/bypass_meters.py off
 """
 import argparse
 import base64
@@ -43,7 +44,7 @@ import sys
 import urllib.error
 import urllib.request
 
-PRIORIDADE = 600  # acima dos flows de producao (100/150/200/300)
+PRIORITY = 600  # above the production flows (100/150/200/300)
 
 USER = os.getenv("FAIR5G_ONOS_USER", "onos")
 PASSWORD = os.getenv("FAIR5G_ONOS_PASS", "rocks")
@@ -64,148 +65,149 @@ def onos(method, path, payload=None):
             body = r.read()
             return json.loads(body) if body else {}
     except urllib.error.HTTPError as e:
-        print(f"[ERRO] ONOS {method} {path}: HTTP {e.code} — {e.read().decode()[:200]}")
+        print(f"[ERROR] ONOS {method} {path}: HTTP {e.code} — {e.read().decode()[:200]}")
         return None
     except urllib.error.URLError as e:
-        print(f"[ERRO] ONOS {method} {path}: {e.reason}")
+        print(f"[ERROR] ONOS {method} {path}: {e.reason}")
         return None
 
 
-def ovs(comando):
-    """Le direto do switch. A visao do ONOS pode divergir da do switch, e quem
-    aplica o enforcement e o switch."""
+def ovs(command):
+    """Read straight from the switch. ONOS's view can diverge from the switch's,
+    and the switch is what actually enforces."""
     try:
-        r = subprocess.run(f"ovs-ofctl -O OpenFlow13 {comando} {SWITCH}",
+        r = subprocess.run(f"ovs-ofctl -O OpenFlow13 {command} {SWITCH}",
                            shell=True, capture_output=True, text=True, timeout=15)
         return r.stdout
     except Exception as e:
-        return f"[ERRO] ovs-ofctl: {e}"
+        return f"[ERROR] ovs-ofctl: {e}"
 
 
-def pegar_dpid():
+def get_dpid():
     data = onos("GET", "/onos/v1/devices") or {}
     for d in data.get("devices", []):
         if d.get("available"):
             return d["id"]
-    print("[ERRO] nenhum switch disponivel no ONOS. O ambiente esta no ar?")
+    print("[ERROR] no switch available in ONOS. Is the environment up?")
     sys.exit(1)
 
 
-def meter_do_flow(flow):
+def meter_of(flow):
     for i in flow.get("treatment", {}).get("instructions", []):
         if i.get("type") == "METER":
             return str(i.get("meterId"))
     return None
 
 
-def resumo_selector(flow):
-    partes = []
+def selector_summary(flow):
+    parts = []
     for c in flow.get("selector", {}).get("criteria", []):
         if c.get("type") in ("IPV4_SRC", "IPV4_DST"):
-            partes.append(f"{c['type'].split('_')[1].lower()}={c.get('ip')}")
-    saida = [i.get("port") for i in flow.get("treatment", {}).get("instructions", [])
-             if i.get("type") == "OUTPUT"]
-    return f"{' '.join(partes) or '(sem match de IP)'} -> porta {saida or '?'}"
+            parts.append(f"{c['type'].split('_')[1].lower()}={c.get('ip')}")
+    out = [i.get("port") for i in flow.get("treatment", {}).get("instructions", [])
+           if i.get("type") == "OUTPUT"]
+    return f"{' '.join(parts) or '(no IP match)'} -> port {out or '?'}"
 
 
-def flows_da_fatia(dpid, meter_id):
-    """Flows de producao que aplicam o meter da fatia alvo."""
+def slice_flows(dpid, meter_id):
+    """Production flows that apply the target slice's meter."""
     data = onos("GET", f"/onos/v1/flows/{dpid}") or {}
     return [f for f in data.get("flows", [])
-            if meter_do_flow(f) == str(meter_id) and f.get("priority") != PRIORIDADE]
+            if meter_of(f) == str(meter_id) and f.get("priority") != PRIORITY]
 
 
-def mostrar_meters(dpid):
+def show_meters(dpid):
     data = onos("GET", f"/onos/v1/meters/{dpid}") or {}
     meters = data.get("meters", [])
     if not meters:
-        print("  (o ONOS nao lista nenhum meter)")
+        print("  (ONOS lists no meters)")
     for m in meters:
         for b in m.get("bands", []):
             print(f"  [onos]  meter id={m.get('id')} rate={b.get('rate')} kbps  "
-                  f"descartes: packets={b.get('packets')} bytes={b.get('bytes')}")
-    # O ONOS costuma devolver os contadores de banda zerados mesmo com o meter
-    # descartando pacotes. Os numeros que valem sao os do switch.
-    saida = ovs("meter-stats")
+                  f"drops: packets={b.get('packets')} bytes={b.get('bytes')}")
+    # ONOS usually returns the band counters at zero even while the meter is
+    # dropping packets. The numbers that count are the switch's.
+    out = ovs("meter-stats")
     print("  [switch] ovs-ofctl meter-stats:")
-    for linha in (saida or "").splitlines():
-        if linha.strip():
-            print(f"    {linha.rstrip()}")
+    for line in (out or "").splitlines():
+        if line.strip():
+            print(f"    {line.rstrip()}")
 
 
-def mostrar_flows():
-    print(f"Flows no switch {SWITCH} com contadores (n_packets mostra quem carrega trafego):")
-    for linha in (ovs("dump-flows") or "").splitlines():
-        if "n_packets=0," in linha or not linha.strip():
+def show_flows():
+    print(f"Flows on switch {SWITCH} with counters (n_packets shows who carries traffic):")
+    for line in (ovs("dump-flows") or "").splitlines():
+        if "n_packets=0," in line or not line.strip():
             continue
-        print(f"  {linha.strip()}")
-    print("\n(flows com n_packets=0 foram omitidos)")
+        print(f"  {line.strip()}")
+    print("\n(flows with n_packets=0 were omitted)")
 
 
-def ligar(dpid, meter_id):
-    originais = flows_da_fatia(dpid, meter_id)
-    if not originais:
-        print(f"[ERRO] nenhum flow de producao usa o meter {meter_id}.")
-        print("       Confira o id com 'status' e passe --meter-id.")
+def turn_on(dpid, meter_id):
+    originals = slice_flows(dpid, meter_id)
+    if not originals:
+        print(f"[ERROR] no production flow uses meter {meter_id}.")
+        print("        Check the id with 'status' and pass --meter-id.")
         sys.exit(1)
 
-    print(f"Clonando {len(originais)} flow(s) do meter {meter_id} sem a instrucao METER:")
-    instalados = 0
-    for f in originais:
-        instrs = [i for i in f.get("treatment", {}).get("instructions", [])
-                  if i.get("type") != "METER"]
+    print(f"Cloning {len(originals)} flow(s) of meter {meter_id} without the METER instruction:")
+    installed = 0
+    for f in originals:
+        instructions = [i for i in f.get("treatment", {}).get("instructions", [])
+                        if i.get("type") != "METER"]
         clone = {
-            "priority": PRIORIDADE,
+            "priority": PRIORITY,
             "isPermanent": True,
             "selector": f.get("selector", {}),
-            "treatment": {"instructions": instrs},
+            "treatment": {"instructions": instructions},
         }
         if onos("POST", f"/onos/v1/flows/{dpid}", payload=clone) is None:
-            print(f"  [ERRO] falhou: {resumo_selector(f)}")
-            print("         rode 'off' antes de tentar de novo.")
+            print(f"  [ERROR] failed: {selector_summary(f)}")
+            print("          run 'off' before trying again.")
             sys.exit(1)
-        print(f"  [ok] {resumo_selector(f)}")
-        instalados += 1
+        print(f"  [ok] {selector_summary(f)}")
+        installed += 1
 
-    print(f"\n{instalados} flow(s) de bypass ativos em prioridade {PRIORIDADE}.")
-    print("Rode o iperf3 e depois 'status': os descartes do meter nao podem crescer.")
+    print(f"\n{installed} bypass flow(s) active at priority {PRIORITY}.")
+    print("Run iperf3, then 'status': the meter drops must not grow.")
 
 
-def desligar(dpid):
-    # Identifica o bypass pela FORMA, nao pelo appId: prioridade 600 e treatment
-    # sem METER. Os flows de producao usam 100/150/200/300, nao ha como confundir.
+def turn_off(dpid):
+    # The bypass is identified by SHAPE, not by appId: priority 600 and a
+    # treatment with no METER. Production flows use 100/150/200/300, so there is
+    # no way to confuse them.
     data = onos("GET", f"/onos/v1/flows/{dpid}") or {}
-    removidos = 0
+    removed = 0
     for f in data.get("flows", []):
-        if f.get("priority") != PRIORIDADE or meter_do_flow(f) is not None:
+        if f.get("priority") != PRIORITY or meter_of(f) is not None:
             continue
         if onos("DELETE", f"/onos/v1/flows/{dpid}/{f['id']}") is not None:
-            removidos += 1
-    print(f"[ok] {removidos} flow(s) de bypass removido(s). Os meters voltam a valer.")
-    if removidos == 0:
-        print("     (nenhum encontrado — talvez ja estivessem removidos)")
+            removed += 1
+    print(f"[ok] {removed} bypass flow(s) removed. The meters apply again.")
+    if removed == 0:
+        print("     (none found — they may already have been removed)")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("acao", choices=["on", "off", "status", "flows"])
+    ap.add_argument("action", choices=["on", "off", "status", "flows"])
     ap.add_argument("--meter-id", default="1",
-                    help="meter da fatia a desviar (padrao: 1, fatia 1)")
+                    help="meter of the slice to bypass (default: 1, slice 1)")
     args = ap.parse_args()
 
-    if args.acao == "flows":
-        mostrar_flows()
+    if args.action == "flows":
+        show_flows()
         return
 
-    dpid = pegar_dpid()
-    if args.acao == "status":
-        print(f"Meters em {dpid}:")
-        mostrar_meters(dpid)
-    elif args.acao == "on":
-        ligar(dpid, args.meter_id)
+    dpid = get_dpid()
+    if args.action == "status":
+        print(f"Meters on {dpid}:")
+        show_meters(dpid)
+    elif args.action == "on":
+        turn_on(dpid, args.meter_id)
     else:
-        desligar(dpid)
+        turn_off(dpid)
 
 
 if __name__ == "__main__":

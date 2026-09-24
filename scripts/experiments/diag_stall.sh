@@ -1,78 +1,87 @@
 #!/usr/bin/env bash
-# Coleta, de uma vez so, tudo que e necessario para diagnosticar o travamento
-# do fluxo de uma fatia (o fluxo para depois de ~15-30 s e nao volta).
+# Collects, in one pass, everything needed to diagnose the stall of a slice's
+# data plane (traffic stops after ~15-30 s and never comes back).
 #
-# Rode no terminal do HOSPEDEIRO, com o ambiente no ar, LOGO DEPOIS de o fluxo
-# travar — varias das evidencias sao volateis e somem no `down`.
+# Run this on the HOST terminal, with the environment UP, RIGHT AFTER the flow
+# stalls — several of the signals are volatile and disappear on `down`.
 #
-# Uso:  sudo bash scripts/experiments/diag_stall.sh 2
-#       (o argumento e o indice da fatia; padrao 1)
+# Usage:  sudo bash scripts/experiments/diag_stall.sh 2
+#         (the argument is the slice index; default 1)
 #
-# O relatorio sai em runs/diag_stall_<timestamp>.txt
+# The report is written to runs/diag_stall_<timestamp>.txt
 
 set -u
-FATIA="${1:-1}"
-UE="mn.ue${FATIA}"
-UPF="upf${FATIA}"
-SMF="smf${FATIA}"
-UE_IP="10.34.0.$((199 + FATIA))"
-GW_TUNEL="10.$((44 + FATIA)).0.1"
+SLICE="${1:-1}"
+UE="mn.ue${SLICE}"
+UPF="upf${SLICE}"
+SMF="smf${SLICE}"
+UE_IP="10.34.0.$((199 + SLICE))"
+TUNNEL_GW="10.$((44 + SLICE)).0.1"
 GNB_IP="10.34.0.3"
 
-RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
-SAIDA="$RAIZ/runs/diag_stall_$(date +%Y-%m-%d_%H%M%S).txt"
-mkdir -p "$(dirname "$SAIDA")"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OUT="$ROOT/runs/diag_stall_$(date +%Y-%m-%d_%H%M%S).txt"
+mkdir -p "$(dirname "$OUT")"
 
-secao() { printf '\n===== %s =====\n' "$1" >> "$SAIDA"; }
-rodar() { echo "\$ $*" >> "$SAIDA"; eval "$@" >> "$SAIDA" 2>&1; }
+# Bail out early if the topology is gone: without it half the report is just
+# "No such container" and the run is wasted.
+if ! ovs-vsctl br-exists s1 2>/dev/null || ! docker ps --format '{{.Names}}' | grep -q "^${UE}$"; then
+  echo "[ERROR] switch s1 or container ${UE} not found."
+  echo "        The environment must still be UP. Nothing was collected."
+  exit 1
+fi
+
+section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+capture() { echo "\$ $*" >> "$OUT"; eval "$@" >> "$OUT" 2>&1; }
 
 {
-  echo "Diagnostico de travamento — fatia $FATIA"
-  echo "data: $(date -Iseconds)"
-  echo "UE=$UE  UPF=$UPF  SMF=$SMF  ue_ip=$UE_IP  gw_tunel=$GW_TUNEL"
-} > "$SAIDA"
+  echo "Stall diagnostics — slice $SLICE"
+  echo "date: $(date -Iseconds)"
+  echo "UE=$UE  UPF=$UPF  SMF=$SMF  ue_ip=$UE_IP  tunnel_gw=$TUNNEL_GW"
+} > "$OUT"
 
-# 1) O trafego ainda sai da UE? Duas amostras separadas revelam se os
-#    contadores estao congelados — uma foto unica nao diz nada.
-secao "flows: amostra 1"
-rodar "ovs-ofctl -O OpenFlow13 dump-flows s1 | grep $UE_IP"
-secao "gerando trafego por 5s (ping no tunel, deve falhar)"
-rodar "docker exec $UE ping -c 5 -W 1 $GW_TUNEL"
-secao "flows: amostra 2 (compare n_packets com a amostra 1)"
-rodar "ovs-ofctl -O OpenFlow13 dump-flows s1 | grep $UE_IP"
+# 1) Is traffic still leaving the UE? Two samples with traffic in between reveal
+#    whether the counters are frozen — a single snapshot says nothing.
+section "flows: sample 1"
+capture "ovs-ofctl -O OpenFlow13 dump-flows s1 | grep $UE_IP"
+section "generating traffic for 5s (ping through the tunnel, expected to fail)"
+capture "docker exec $UE ping -c 5 -W 1 $TUNNEL_GW"
+section "flows: sample 2 (compare n_packets against sample 1)"
+capture "ovs-ofctl -O OpenFlow13 dump-flows s1 | grep $UE_IP"
 
-# 2) Estado da UE
-secao "UE: interface do tunel"
-rodar "docker exec $UE ip -br addr show uesimtun0"
-secao "UE: rota para o tunel"
-rodar "docker exec $UE ip route get $GW_TUNEL"
-secao "UE: alcance da rede de acesso (fora do tunel — deve funcionar)"
-rodar "docker exec $UE ping -c 3 -W 1 $GNB_IP"
-secao "UE: log do nr-ue"
-rodar "docker exec $UE sh -c 'tail -60 /tmp/*.log'"
+# 2) UE state
+section "UE: tunnel interface"
+capture "docker exec $UE ip -br addr show uesimtun0"
+section "UE: route to the tunnel"
+capture "docker exec $UE ip route get $TUNNEL_GW"
+section "UE: access network reachability (outside the tunnel — should work)"
+capture "docker exec $UE ping -c 3 -W 1 $GNB_IP"
+section "UE: nr-ue log"
+capture "docker exec $UE sh -c 'tail -60 /tmp/*.log'"
 
-# 3) Nucleo — onde o pacote provavelmente morre
-secao "UPF: contadores das regras de isolamento (M4)"
-# Se uma regra DROP tiver contador alto, o isolamento dentro do UPF e o culpado.
-rodar "docker exec $UPF iptables -L -n -v"
-secao "UPF: NAT (masquerade)"
-rodar "docker exec $UPF iptables -t nat -L -n -v"
-secao "UPF: interfaces e descartes"
-rodar "docker exec $UPF ip -s link"
-secao "UPF: log"
-rodar "docker logs --tail 60 $UPF"
-secao "SMF: log (procure por session release / PFCP)"
-rodar "docker logs --tail 60 $SMF"
-secao "AMF: log"
-rodar "docker logs --tail 40 amf"
-secao "gNB: log"
-rodar "docker logs --tail 40 gnb"
+# 3) Core — where the packet most likely dies
+section "UPF: isolation rule counters (M4)"
+# A DROP rule with a high counter makes the in-UPF isolation the culprit.
+capture "docker exec $UPF iptables -L -n -v"
+section "UPF: NAT (masquerade)"
+capture "docker exec $UPF iptables -t nat -L -n -v"
+section "UPF: interfaces and drops"
+capture "docker exec $UPF ip -s link"
+section "UPF: log"
+capture "docker logs --tail 60 $UPF"
+section "SMF: log (look for session release / PFCP)"
+capture "docker logs --tail 60 $SMF"
+section "AMF: log"
+capture "docker logs --tail 40 amf"
+section "gNB: log (look for 'Discarding RRC Setup Request' and 'signal lost')"
+capture "docker logs --tail 40 gnb"
 
 echo
-echo "[ok] relatorio em: $SAIDA"
+echo "[ok] report at: $OUT"
 echo
-echo "Leitura rapida:"
-echo "  - n_packets IGUAL nas duas amostras -> a UE parou de transmitir"
-echo "  - n_packets CRESCEU                 -> a UE transmite e o pacote morre adiante"
-echo "  - regra DROP no UPF com contador alto -> isolamento M4 e o culpado"
-echo "  - 'session release' no SMF          -> o core derrubou a sessao"
+echo "Quick reading:"
+echo "  - n_packets UNCHANGED between samples -> the UE stopped transmitting"
+echo "  - n_packets GREW                      -> the UE transmits, the packet dies downstream"
+echo "  - UPF DROP rule with a high counter   -> M4 isolation is the culprit"
+echo "  - 'session release' in the SMF        -> the core tore the session down"
+echo "  - 'Discarding RRC Setup Request'      -> the UE lost the radio link and could not re-attach"

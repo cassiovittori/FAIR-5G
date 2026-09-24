@@ -29,9 +29,9 @@ from fair5gctl.core.slicing import (
 )
 
 
-# Imagem do UE: por padrao a derivada local, que ja traz iperf3 e demais
-# ferramentas de trafego. FAIR5G_UE_IMAGE permite voltar a oficial quando as
-# ferramentas nao forem necessarias.
+# UE image: by default the locally derived one, which already ships iperf3 and
+# the other traffic tools. FAIR5G_UE_IMAGE switches back to the official image
+# when those tools are not needed.
 UE_IMAGE = os.getenv("FAIR5G_UE_IMAGE", "fair5g-ue:v3.2.7")
 
 ACCESS_NETWORK = "fair5g-access"
@@ -302,70 +302,70 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
     rate_by_index = {s.index: meter_rate_kbps(s.ambr_down_mbps) for s in specs}
     burst_by_index = {s.index: max(int(rate_by_index[s.index] * 0.8192), 1) for s in specs}
 
-    # Aguarda a remocao dos meters anteriores antes de criar os novos: criar
-    # sobre um estado ainda sujo faz o ONOS reaproveitar identificadores que o
-    # switch ainda considera ocupados.
+    # Wait for the previous meters to be removed before creating the new ones:
+    # creating on top of a state that is still dirty makes ONOS reuse ids the
+    # switch still considers taken.
     for _ in range(20):
-        atual = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
-        if not atual.get("meters"):
+        current = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+        if not current.get("meters"):
             break
         time.sleep(0.5)
 
     print(f"Instalando {len(specs)} meters no switch {dpid}...")
 
-    # Criacao SERIALIZADA: cada meter e confirmado no ONOS antes do proximo.
+    # SERIALIZED creation: each meter is confirmed in ONOS before the next one.
     #
-    # Disparar os POSTs em sequencia rapida gera condicao de corrida: o ONOS
-    # aloca o identificador sem esperar a confirmacao do anterior, e dois meters
-    # recebem o MESMO id. O switch instala o primeiro e rejeita o segundo por id
-    # duplicado, mas o ONOS registra o segundo como criado — ficando com uma
-    # visao divergente da do switch.
+    # Firing the POSTs in quick succession creates a race: ONOS allocates the id
+    # without waiting for the previous confirmation, and two meters get the SAME
+    # id. The switch installs the first and rejects the second as a duplicate,
+    # but ONOS records the second as created — leaving it with a view that
+    # diverges from the switch's.
     #
-    # Observado em 2026-09-23 com 2 fatias: o OVS mostrava meter id=1 com taxa
-    # 8000 kbps (fatia 1) enquanto o ONOS mostrava meter id=1 com taxa 3000 kbps
-    # (fatia 2). Efeito pratico: a fatia 1 ficava SEM enforcement e a fatia 2
-    # recebia um limite que nao era o seu — com o log anunciando sucesso.
-    vistos = set()
+    # Observed on 2026-09-23 with 2 slices: OVS showed meter id=1 at 8000 kbps
+    # (slice 1) while ONOS showed meter id=1 at 3000 kbps (slice 2). In practice
+    # slice 1 ran with NO enforcement and slice 2 got a limit that was not its
+    # own — with the log announcing success.
+    seen = set()
     for spec in specs:
-        taxa = rate_by_index[spec.index]
+        rate = rate_by_index[spec.index]
         payload = {
             "deviceId": dpid,
             "unit": "KB_PER_SEC",
             "burst": True,
             "bands": [{
                 "type": "DROP",
-                "rate": taxa,
+                "rate": rate,
                 "burstSize": burst_by_index[spec.index],
             }],
         }
         result = _onos_request("POST", f"/onos/v1/meters/{dpid}", user, password, payload=payload)
         if result is None:
-            print(f"[AVISO] POST meter da fatia {spec.index} falhou.")
+            print(f"[WARN] POST of the meter for slice {spec.index} failed.")
             continue
 
-        # Confirma que ESTE meter apareceu antes de criar o proximo.
-        confirmado = None
+        # Confirm THIS meter showed up before creating the next one.
+        confirmed = None
         for _ in range(20):
-            dados = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
-            for m in dados.get("meters", []):
+            data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+            for m in data.get("meters", []):
                 mid = m.get("id")
-                if mid in vistos:
+                if mid in seen:
                     continue
                 for band in m.get("bands", []):
-                    if band.get("rate") == taxa:
-                        confirmado = mid
+                    if band.get("rate") == rate:
+                        confirmed = mid
                         break
-                if confirmado:
+                if confirmed:
                     break
-            if confirmado:
+            if confirmed:
                 break
             time.sleep(0.5)
 
-        if confirmado is None:
-            print(f"[AVISO] meter da fatia {spec.index} (taxa {taxa} kbps) nao foi "
-                  f"confirmado no ONOS apos 10s.")
+        if confirmed is None:
+            print(f"[WARN] the meter for slice {spec.index} ({rate} kbps) was not "
+                  f"confirmed in ONOS after 10s.")
         else:
-            vistos.add(confirmado)
+            seen.add(confirmed)
 
     meters_data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
     if not meters_data:
@@ -413,23 +413,23 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
             f"ha fatias compartilhando limite agregado."
         )
 
-    # Confere a visao do ONOS contra a do switch. As duas podem divergir (o ONOS
-    # registra como criado um meter que o switch rejeitou), e nesse caso o
-    # enforcement real e o do switch — o que o ONOS relata nao vale como
-    # evidencia.
+    # Cross-check ONOS's view against the switch's. The two can diverge (ONOS
+    # records as created a meter the switch rejected), and in that case the real
+    # enforcement is the switch's — what ONOS reports does not count as
+    # evidence.
     try:
         dump = run("ovs-ofctl -O OpenFlow13 dump-meters s1", check=False)
         if dump.stdout:
-            taxas_switch = sorted(int(m) for m in re.findall(r"rate=(\d+)", dump.stdout))
-            taxas_esperadas = sorted(rate_by_index.values())
-            if taxas_switch != taxas_esperadas:
-                print(f"[AVISO] divergencia ONOS x switch — taxas no switch: "
-                      f"{taxas_switch} kbps, esperadas: {taxas_esperadas} kbps. "
-                      f"O enforcement efetivo e o do switch.")
+            switch_rates = sorted(int(m) for m in re.findall(r"rate=(\d+)", dump.stdout))
+            expected_rates = sorted(rate_by_index.values())
+            if switch_rates != expected_rates:
+                print(f"[WARN] ONOS/switch mismatch — rates on the switch: "
+                      f"{switch_rates} kbps, expected: {expected_rates} kbps. "
+                      f"The effective enforcement is the switch's.")
             else:
-                print(f"Meters confirmados no switch: {taxas_switch} kbps")
+                print(f"Meters confirmed on the switch: {switch_rates} kbps")
     except Exception as e:
-        print(f"[AVISO] nao foi possivel conferir os meters no switch: {e}")
+        print(f"[WARN] could not check the meters on the switch: {e}")
 
     return meter_ids
 
@@ -809,21 +809,23 @@ def run_topology():
             except Exception:
                 pass
         else:
-            # Valida as pos-condicoes do ambiente ANTES de entregar o terminal.
+            # Check the environment's post-conditions BEFORE handing over the
+            # terminal.
             #
-            # Aqui a saida sai em terminal normal e em ordem. Enquanto o verify era
-            # disparado pelo up_v0.sh, ele escrevia em paralelo com a CLI do
-            # Containernet, que ja havia posto o terminal em modo raw (cbreak): o
-            # '\n' deixava de voltar a coluna 0 e as linhas saiam escalonadas e
-            # intercaladas com o prompt.
+            # Running here, the output comes out in a normal terminal and in
+            # order. While the check was fired by up_v0.sh it wrote in parallel
+            # with the Containernet CLI, which had already put the terminal into
+            # raw mode (cbreak): '\n' stopped returning to column 0 and the
+            # lines came out in a staircase, interleaved with the prompt.
             #
-            # check=False de proposito: uma pos-condicao reprovada avisa, mas nao
-            # derruba a topologia — quem decide se os dados servem e o operador.
-            verificador = os.path.join(REPO_ROOT, "scripts", "verify_up.py")
-            if os.path.isfile(verificador):
-                # subprocess.run direto, nao o helper run(): aquele usa
-                # capture_output=True e engoliria o relatorio do verify.
-                subprocess.run(f"python3 {verificador}", shell=True)
+            # A failed post-condition warns but does not tear the topology down.
+            # Whether the data is usable is the operator's call, so the exit
+            # status is deliberately ignored.
+            checker = os.path.join(REPO_ROOT, "scripts", "verify_up.py")
+            if os.path.isfile(checker):
+                # subprocess.run directly, not the run() helper: that one uses
+                # capture_output=True and would swallow the report.
+                subprocess.run(f"python3 {checker}", shell=True)
 
             roteiro = os.getenv("FAIR5G_CLI_SCRIPT") or ""
             if roteiro and os.path.isfile(roteiro):
