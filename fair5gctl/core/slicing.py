@@ -62,8 +62,8 @@ MAX_UES_PER_SLICE = 4
 # the control run with NO meters, in which one slice consumes the whole ceiling
 # and starves the others.
 QOS_PROFILES = [
-    {"index": 9, "ambr_down_mbps": 2, "ambr_up_mbps": 2},   # eMBB-like profile
-    {"index": 2, "ambr_down_mbps": 1, "ambr_up_mbps": 1},   # URLLC-like profile
+    {"index": 9, "ambr_down_mbps": 100, "ambr_up_mbps": 50},   # eMBB-like profile
+    {"index": 2, "ambr_down_mbps": 10, "ambr_up_mbps": 10},   # URLLC-like profile
 ]
 
 # UEs live on the ACCESS network (10.34.0.0/24), separate from the core's
