@@ -30,3 +30,6 @@ openflow/
 openflow/
 
 tests/
+.fair5g_state.json
+.fair5g_topology.pid
+measurements/campaigns/

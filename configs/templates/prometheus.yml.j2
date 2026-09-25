@@ -14,14 +14,29 @@ scrape_configs:
   - job_name: upf
     static_configs:
       - targets: [{% for slice in slices %}"upf{{ slice.index }}.open5gs.org:9090"{% if not loop.last %}, {% endif %}{% endfor %}]
+  - job_name: statsexporter
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["statsexporter:9200"]
   - job_name: 'blackbox-ping-slices'
     metrics_path: /probe
     params:
       module: [icmp]
+    # Um bloco por UE, carregando rotulos de identidade junto do alvo.
+    # Sem isso as series saem identificadas apenas pelo IP de acesso
+    # (10.34.0.200, .201, ...), que nao revela a qual fatia o UE pertence —
+    # inviabilizando a leitura dos paineis quando ha varios UEs por fatia.
+    # Com `ue` e `slice` como rotulos, as consultas podem agrupar por fatia e as
+    # legendas passam a exibir nomes legiveis.
     static_configs:
-      - targets:
 {% for slice in slices %}
-        - {{ slice.ue_mininet_ip }}
+{% for ue in slice.ues %}
+      - targets: ["{{ ue.access_ip }}"]
+        labels:
+          ue: "{{ ue.name }}"
+          slice: "{{ slice.index }}"
+          slice_ambr_mbps: "{{ slice.ambr_down_mbps }}"
+{% endfor %}
 {% endfor %}
     relabel_configs:
       - source_labels: [__address__]

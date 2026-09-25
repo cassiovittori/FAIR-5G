@@ -72,9 +72,24 @@ else
 fi
 export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 
+# Verificacao de pos-condicoes.
+#
+# Roda em segundo plano com atraso porque o auto_sdn.py bloqueia ate o ambiente
+# ser derrubado: verificar depois dele seria verificar um ambiente que ja nao
+# existe. O atraso da tempo de a topologia subir e os UEs registrarem.
+if [ "${FAIR5G_SKIP_VERIFY:-0}" != "1" ]; then
+  (
+    sleep "${FAIR5G_VERIFY_DELAY:-45}"
+    FAIR5G_STRICT="${FAIR5G_STRICT:-0}" \
+    FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
+    FAIR5G_UES_PER_SLICE="${FAIR5G_UES_PER_SLICE:-}" \
+      : # verificacao movida para auto_sdn.py, antes de subir a CLI
+        # (rodando aqui, em paralelo com a CLI, a saida saia escalonada)
+  ) &
+fi
+
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"
-

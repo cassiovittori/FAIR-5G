@@ -45,49 +45,172 @@ GRAFANA_DASHBOARD = os.environ.get("GRAFANA_DASHBOARD", "")
 # Derivado de core.slicing (fonte unica de verdade do enderecamento) em vez de
 # hardcoded: quando a subnet dos UEs muda, as queries acompanham sozinhas.
 def _ue_ip_defaults() -> dict:
+    """IPs de acesso dos UEs, por indice de fatia.
+
+    A quantidade de fatias e resolvida nesta ordem de precedencia:
+      1. FAIR5G_SLICE_COUNT no ambiente (util para sobrescrever pontualmente);
+      2. .fair5g_state.json, gravado pelo `up` — necessario porque `metrics`
+         normalmente roda em OUTRO terminal, onde a variavel de ambiente do
+         processo do `up` nao existe;
+      3. DEFAULT_SLICE_COUNT.
+
+    Sem o passo 2 o painel exibia apenas as fatias padrao mesmo com N no ar
+    (observado em 2026-09-09: 4 fatias ativas, 2 exibidas).
+    """
     try:
         from .core.slicing import build_slice_specs, DEFAULT_SLICE_COUNT
-        count = int(os.environ.get("FAIR5G_SLICE_COUNT", DEFAULT_SLICE_COUNT))
-        return {s.index: s.ue_mininet_ip for s in build_slice_specs(count)}
+
+        count = os.environ.get("FAIR5G_SLICE_COUNT")
+        if not count:
+            try:
+                state_file = Path(__file__).resolve().parent.parent / ".fair5g_state.json"
+                count = json.loads(state_file.read_text()).get("slice_count")
+            except Exception:
+                count = None
+        if not count:
+            count = DEFAULT_SLICE_COUNT
+        ues = None
+        try:
+            state_file = Path(__file__).resolve().parent.parent / ".fair5g_state.json"
+            ues = json.loads(state_file.read_text()).get("ues_per_slice")
+        except Exception:
+            pass
+        ues = os.environ.get("FAIR5G_UES_PER_SLICE") or ues
+        specs = build_slice_specs(int(count), ues)
+        # Mapa nome-do-UE -> IP de acesso. Com multiplos UEs por fatia a chave
+        # nao pode mais ser o indice da fatia.
+        global _UE_BY_NAME, _SPECS
+        _SPECS = specs
+        _UE_BY_NAME = {ue.name: ue.access_ip for s in specs for ue in s.ues}
+        return {s.index: s.ue_mininet_ip for s in specs}
     except Exception:
         return {}
 
 
+_UE_BY_NAME = {}
+_SPECS = []
 _UE_IPS = _ue_ip_defaults()
 UE1_IP = os.environ.get("UE1_IP", _UE_IPS.get(1, ""))
 UE2_IP = os.environ.get("UE2_IP", _UE_IPS.get(2, ""))
 
+
+def _slice_indices() -> list:
+    """Indices de fatia ativos, derivados de core.slicing.
+
+    Sem isso as consultas ficariam presas a duas fatias, enquanto o
+    prometheus.yml ja e gerado dinamicamente para N fatias: o ambiente
+    coletaria tudo e a CLI exibiria apenas metade.
+    """
+    if _UE_IPS:
+        return sorted(_UE_IPS.keys())
+    return [1, 2]
+
+
+def _build_queries() -> dict:
+    """Monta as consultas Prometheus para as N fatias ativas.
+
+    NOTA SOBRE A METRICA DE LATENCIA (decisao de 2026-09-09):
+    a metrica oficial de latencia e `probe_icmp_duration_seconds{phase="rtt"}`,
+    que corresponde ao round-trip time do pacote ICMP.
+
+    A metrica `probe_duration_seconds` foi REMOVIDA do painel. Ela mede a
+    duracao total da sondagem do ponto de vista do blackbox exporter, somando
+    as fases de resolucao de nome, preparacao do socket e o RTT propriamente
+    dito. Ou seja, agrega o custo da instrumentacao ao desempenho da rede, o
+    que a torna inadequada como indicador de latencia de rede: e sempre maior
+    que o RTT e a diferenca nao tem significado de rede. Exibi-la ao lado do
+    RTT convidava a interpretacao equivocada de que seriam duas medidas
+    comparaveis da mesma grandeza.
+    """
+    indices = _slice_indices()
+
+    # Um probe por UE. Com multiplos UEs por fatia, medir apenas o primeiro
+    # esconderia justamente o efeito que interessa: a competicao entre UEs da
+    # mesma fatia pelo AMBR agregado dela.
+    conectividade = {}
+    latencia = {}
+    alvos = ([(ue.name, ue.access_ip) for s in _SPECS for ue in s.ues]
+             if _SPECS else [(f"ue{i}", _UE_IPS.get(i, "")) for i in indices])
+    for nome, ip in alvos:
+        conectividade[f"Probe {nome} (OK=1)"] = (
+            f'probe_success{{job="blackbox-ping-slices", instance="{ip}"}}'
+        )
+        latencia[f"{nome} RTT ICMP"] = (
+            f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", '
+            f'instance="{ip}", phase="rtt"}} * 1000'
+        )
+
+    smf = {}
+    upf = {}
+    for i in indices:
+        smf[f"PDU Sessions SMF{i}"] = (
+            f'fivegs_smffunction_sm_pdusessioncreationreq'
+            f'{{job="smf", instance="smf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"Sessoes UPF{i}"] = (
+            f'fivegs_upffunction_upf_sessionnbr'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"QoS Flows UPF{i}"] = (
+            f'fivegs_upffunction_upf_qosflows'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}'
+        )
+        upf[f"GTP Ingress UPF{i} (p/s)"] = (
+            f'rate(fivegs_ep_n3_gtp_indatapktn3upf'
+            f'{{job="upf", instance="upf{i}.open5gs.org:9090"}}[1m])'
+        )
+
+    # Recursos por container (cAdvisor).
+    #
+    # A separacao entre COMPARTILHADOS e POR FATIA nao e cosmetica: os
+    # componentes compartilhados (gNB, AMF, ONOS) sao o caminho pelo qual um
+    # efeito atravessa de uma fatia para outra — se sobrecarregar a fatia 1
+    # satura a CPU do gNB, a fatia 2 degrada por consequencia, e isso e
+    # justamente o mecanismo de falha de isolamento sob investigacao. Os
+    # componentes por fatia servem de verificacao: confirmam que a perturbacao
+    # chegou onde se pretendia e permitem medir o efeito localizado.
+    recursos_compartilhados = {}
+    for nome in ("gnb", "amf", "onos-controller"):
+        recursos_compartilhados[f"CPU {nome} (%)"] = (
+            f'fair5g_container_cpu_percent{{name="{nome}"}}'
+        )
+        recursos_compartilhados[f"Mem {nome} (MiB)"] = (
+            f'fair5g_container_memory_bytes{{name="{nome}"}} / 1024 / 1024'
+        )
+
+    recursos_fatia = {}
+    for i in indices:
+        for nf in (f"upf{i}", f"smf{i}"):
+            recursos_fatia[f"CPU {nf} (%)"] = (
+                f'fair5g_container_cpu_percent{{name="{nf}"}}'
+            )
+        recursos_fatia[f"Mem upf{i} (MiB)"] = (
+            f'fair5g_container_memory_bytes{{name="upf{i}"}} / 1024 / 1024'
+        )
+    for s_ in _SPECS:
+        for ue in s_.ues:
+            recursos_fatia[f"CPU {ue.name} (%)"] = (
+                f'fair5g_container_cpu_percent{{name="{ue.container}"}}'
+            )
+
+    return {
+        "Conectividade": conectividade,
+        "Latencia (ms)": latencia,
+        "AMF": {
+            "UEs Registrados":     'ran_ue{job="amf"}',
+            "Sessoes AMF":         'amf_session{job="amf"}',
+            "Taxa Registro (r/s)": 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
+            "Taxa Auth (r/s)":     'rate(fivegs_amffunction_amf_authreq{job="amf"}[1m])',
+        },
+        "SMF": smf,
+        "UPF": upf,
+        "Recursos (compartilhados)": recursos_compartilhados,
+        "Recursos (por fatia)": recursos_fatia,
+    }
+
+
 # Queries Prometheus organizadas por categoria
-QUERIES = {
-    "Conectividade": {
-        "Probe UE1 (OK=1)":   f'probe_success{{job="blackbox-ping-slices", instance="{UE1_IP}"}}',
-        "Probe UE2 (OK=1)":   f'probe_success{{job="blackbox-ping-slices", instance="{UE2_IP}"}}',
-    },
-    "Latencia (ms)": {
-        "UE1 Latencia Total":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}"}} * 1000',
-        "UE2 Latencia Total":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}"}} * 1000',
-        "UE1 RTT ICMP":        f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}", phase="rtt"}} * 1000',
-        "UE2 RTT ICMP":        f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}", phase="rtt"}} * 1000',
-    },
-    "AMF": {
-        "UEs Registrados":     'ran_ue{job="amf"}',
-        "Sessoes AMF":         'amf_session{job="amf"}',
-        "Taxa Registro (r/s)": 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
-        "Taxa Auth (r/s)":     'rate(fivegs_amffunction_amf_authreq{job="amf"}[1m])',
-    },
-    "SMF": {
-        "PDU Sessions SMF1":   'fivegs_smffunction_sm_pdusessioncreationreq{job="smf", instance="smf1.open5gs.org:9090"}',
-        "PDU Sessions SMF2":   'fivegs_smffunction_sm_pdusessioncreationreq{job="smf", instance="smf2.open5gs.org:9090"}',
-    },
-    "UPF": {
-        "Sessoes UPF1":        'fivegs_upffunction_upf_sessionnbr{job="upf", instance="upf1.open5gs.org:9090"}',
-        "Sessoes UPF2":        'fivegs_upffunction_upf_sessionnbr{job="upf", instance="upf2.open5gs.org:9090"}',
-        "QoS Flows UPF1":      'fivegs_upffunction_upf_qosflows{job="upf", instance="upf1.open5gs.org:9090"}',
-        "QoS Flows UPF2":      'fivegs_upffunction_upf_qosflows{job="upf", instance="upf2.open5gs.org:9090"}',
-        "GTP Ingress UPF1 (p/s)": 'rate(fivegs_ep_n3_gtp_indatapktn3upf{job="upf", instance="upf1.open5gs.org:9090"}[1m])',
-        "GTP Ingress UPF2 (p/s)": 'rate(fivegs_ep_n3_gtp_indatapktn3upf{job="upf", instance="upf2.open5gs.org:9090"}[1m])',
-    },
-}
+QUERIES = _build_queries()
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +250,10 @@ def _format_value(metric_name: str, value: Optional[float]) -> str:
         return "N/A"
     if "Probe" in metric_name:
         return "OK" if value == 1.0 else "FALHOU"
+    if "(%)" in metric_name:
+        return f"{value:.1f} %"
+    if "(MiB)" in metric_name:
+        return f"{value:.0f} MiB"
     if "ms" in metric_name or "Latencia" in metric_name or "RTT" in metric_name:
         return f"{value:.2f} ms"
     if "r/s" in metric_name or "p/s" in metric_name:
@@ -258,13 +385,34 @@ def cmd_report(run_id: str, runs_dir: Path):
 
     # Coleta série temporal dos últimos 30min para calcular estatísticas
     stats = {}
-    range_queries = {
-        "ue1_latency_ms":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE1_IP}"}} * 1000',
-        "ue2_latency_ms":  f'probe_duration_seconds{{job="blackbox-ping-slices", instance="{UE2_IP}"}} * 1000',
-        "ue1_probe_success": f'probe_success{{job="blackbox-ping-slices", instance="{UE1_IP}"}}',
-        "ue2_probe_success": f'probe_success{{job="blackbox-ping-slices", instance="{UE2_IP}"}}',
-        "amf_reg_rate":    'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])',
-    }
+    # Chaves por fatia (slice{i}_*) em vez de ue1_/ue2_ fixos, e RTT como
+    # metrica de latencia — ver nota em _build_queries sobre por que
+    # probe_duration_seconds foi descartada.
+    range_queries = {}
+    for i in _slice_indices():
+        ip = _UE_IPS.get(i, "")
+        range_queries[f"slice{i}_rtt_ms"] = (
+            f'probe_icmp_duration_seconds{{job="blackbox-ping-slices", '
+            f'instance="{ip}", phase="rtt"}} * 1000'
+        )
+        range_queries[f"slice{i}_probe_success"] = (
+            f'probe_success{{job="blackbox-ping-slices", instance="{ip}"}}'
+        )
+    range_queries["amf_reg_rate"] = 'rate(fivegs_amffunction_rm_reginitreq{job="amf"}[1m])'
+
+    # Recursos por container. Sao a VARIAVEL DE CONTROLE da analise de
+    # isolamento: quando uma fatia degrada durante um experimento, existem duas
+    # explicacoes concorrentes — falha de isolamento de rede ou contencao por
+    # recursos compartilhados do hospedeiro. Sem estas series nao ha como
+    # distinguir uma da outra, e nenhuma conclusao sobre isolamento se sustenta.
+    for i in _slice_indices():
+        range_queries[f"slice{i}_upf_cpu_pct"] = f'fair5g_container_cpu_percent{{name="upf{i}"}}'
+        range_queries[f"slice{i}_ue_cpu_pct"] = f'fair5g_container_cpu_percent{{name="mn.ue{i}"}}'
+    for nome in ("gnb", "amf", "onos-controller"):
+        chave = nome.replace("-", "_")
+        range_queries[f"compartilhado_{chave}_cpu_pct"] = (
+            f'fair5g_container_cpu_percent{{name="{nome}"}}'
+        )
 
     now = int(time.time())
     start = now - 1800  # últimos 30 min
@@ -285,12 +433,21 @@ def cmd_report(run_id: str, runs_dir: Path):
             if results:
                 values = [float(v[1]) for v in results[0]["values"] if v[1] != "NaN"]
                 if values:
+                    ordenado = sorted(values)
+                    n = len(ordenado)
+                    # Mediana e percentis, alem da media: distribuicoes de
+                    # latencia e jitter tem cauda pesada, e a media e puxada por
+                    # valores extremos. A literatura de medicao de redes
+                    # recomenda relatar mediana e percentis de cauda.
+                    mediana = (ordenado[n // 2] if n % 2
+                               else (ordenado[n // 2 - 1] + ordenado[n // 2]) / 2)
                     stats[key] = {
                         "min":    round(min(values), 4),
                         "max":    round(max(values), 4),
                         "mean":   round(sum(values) / len(values), 4),
-                        "p95":    round(sorted(values)[int(len(values) * 0.95)], 4),
-                        "count":  len(values),
+                        "median": round(mediana, 4),
+                        "p95":    round(ordenado[min(int(n * 0.95), n - 1)], 4),
+                        "count":  n,
                     }
                 else:
                     stats[key] = None
@@ -305,13 +462,13 @@ def cmd_report(run_id: str, runs_dir: Path):
         "generated_at": ts,
         "prometheus":   PROMETHEUS_URL,
         "grafana":      GRAFANA_URL,
-        "ue_ips":       {"ue1": UE1_IP, "ue2": UE2_IP},
+        "ue_ips":       {f"slice{i}": _UE_IPS.get(i, "") for i in _slice_indices()},
         "snapshot":     {
             cat: {k: v for k, v in metrics.items()}
             for cat, metrics in data.items()
         },
         "statistics_last_30min": stats,
-        "isolation_assessment": _assess_isolation(stats),
+        "comparativo_por_fatia": _slice_comparison(stats),
     }
 
     # Salva o arquivo
@@ -328,111 +485,149 @@ def cmd_report(run_id: str, runs_dir: Path):
     return out_file
 
 
-def _assess_isolation(stats: dict) -> dict:
+def _slice_comparison(stats: dict) -> dict:
+    """Consolida, lado a lado, o que foi medido em cada fatia.
+
+    ESTA FUNCAO NAO EMITE VEREDITO, e isso e deliberado.
+
+    A versao anterior (`_assess_isolation`) imprimia "ISOLAMENTO OK" ou
+    "POSSIVEL FALHA DE ISOLAMENTO" a partir de uma unica condicao: a razao
+    entre a latencia media do UE1 e a do UE2. Essa heuristica nao sustenta o
+    que o nome promete, por tres motivos:
+
+      1. Nao havia carga aplicada nem cenario de controle. Isolamento so pode
+         ser avaliado comparando uma fatia perturbada com uma fatia observada,
+         sob condicao adversa conhecida e contra uma linha de base.
+      2. O resultado era descorrelacionado do fenomeno: em ambiente ocioso a
+         razao fica proxima de 1 e a funcao acusava "possivel falha"; um jitter
+         aleatorio em uma das fatias produzia "isolamento OK".
+      3. Nao considerava recursos do hospedeiro, entao nao distinguia falha de
+         isolamento de rede de contencao por CPU compartilhada.
+
+    Um veredito automatico e sedutor porque e facil de citar, mas um rotulo
+    errado num relatorio e pior que rotulo nenhum: ele se propaga para figuras
+    e conclusoes sem que ninguem revise a premissa. A interpretacao dos dados
+    cabe a quem projetou o experimento e conhece as condicoes em que ele rodou.
+
+    O que esta funcao entrega e o material para essa interpretacao: metricas de
+    rede por fatia (mediana e p95, nao media), o consumo de recurso do
+    componente dedicado de cada fatia, e o consumo dos componentes
+    compartilhados — que e a variavel de controle sem a qual nao se distingue
+    falha de isolamento de contencao de recursos.
     """
-    Avalia isolamento de slice comparando métricas das duas UEs.
-    Retorna um dict com veredicto e motivo.
-    """
-    assessment = {"verdict": "INDETERMINADO", "reasons": []}
+    def _resumo(chave):
+        v = stats.get(chave)
+        if isinstance(v, dict) and "median" in v:
+            return {k: v[k] for k in ("median", "p95", "max", "count") if k in v}
+        return None
 
-    ue1 = stats.get("ue1_latency_ms")
-    ue2 = stats.get("ue2_latency_ms")
+    por_fatia = {}
+    for i in _slice_indices():
+        por_fatia[f"fatia_{i}"] = {
+            "rtt_ms":        _resumo(f"slice{i}_rtt_ms"),
+            "probe_success": _resumo(f"slice{i}_probe_success"),
+            "upf_cpu_pct":   _resumo(f"slice{i}_upf_cpu_pct"),
+            "ue_cpu_pct":    _resumo(f"slice{i}_ue_cpu_pct"),
+        }
 
-    if not ue1 or not ue2:
-        assessment["reasons"].append("Dados insuficientes para avaliação.")
-        return assessment
+    compartilhados = {}
+    for nome in ("gnb", "amf", "onos-controller"):
+        chave = nome.replace("-", "_")
+        compartilhados[nome] = {"cpu_pct": _resumo(f"compartilhado_{chave}_cpu_pct")}
 
-    # Se UE1 tem latência alta mas UE2 está estável — isolamento OK
-    latency_ratio = ue1["mean"] / ue2["mean"] if ue2["mean"] > 0 else 1.0
-    max_ratio = ue1["max"] / ue2["max"] if ue2["max"] > 0 else 1.0
-
-    if latency_ratio > 3.0:
-        assessment["verdict"] = "ISOLAMENTO OK"
-        assessment["reasons"].append(
-            f"Latência UE1 ({ue1['mean']:.1f}ms) muito superior à UE2 ({ue2['mean']:.1f}ms) "
-            f"— UE2 não foi impactada pela carga no Slice 1."
-        )
-    elif latency_ratio > 1.5:
-        assessment["verdict"] = "ISOLAMENTO PARCIAL"
-        assessment["reasons"].append(
-            f"Latência UE1 ({ue1['mean']:.1f}ms) moderadamente superior à UE2 ({ue2['mean']:.1f}ms)."
-        )
-    else:
-        assessment["verdict"] = "POSSIVEL FALHA DE ISOLAMENTO"
-        assessment["reasons"].append(
-            f"Latências similares — UE1 mean={ue1['mean']:.1f}ms, UE2 mean={ue2['mean']:.1f}ms. "
-            f"Possível recurso compartilhado sendo saturado."
-        )
-
-    # Verificar probe_success
-    ue1_probe = stats.get("ue1_probe_success")
-    ue2_probe = stats.get("ue2_probe_success")
-    if ue1_probe and ue1_probe["min"] < 1.0:
-        assessment["reasons"].append(f"UE1 teve falhas de probe (min={ue1_probe['min']}).")
-    if ue2_probe and ue2_probe["min"] < 1.0:
-        assessment["reasons"].append(f"UE2 teve falhas de probe (min={ue2_probe['min']}).")
-
-    return assessment
+    return {
+        "janela": "ultimos 30 min",
+        "por_fatia": por_fatia,
+        "compartilhados": compartilhados,
+        "nota": (
+            "Dados brutos para interpretacao. Nenhum veredito de isolamento e "
+            "emitido automaticamente: afirmacoes sobre isolamento exigem cenario "
+            "controlado (fatia perturbada versus fatia observada), linha de base "
+            "para comparacao, repeticoes suficientes para distinguir efeito de "
+            "ruido, e verificacao de que os componentes compartilhados nao "
+            "estavam saturados durante a medicao."
+        ),
+    }
 
 
 def _print_report_summary(report: dict):
-    """Exibe resumo legível do relatório no terminal."""
-    stats = report.get("statistics_last_30min", {})
-    assessment = report.get("isolation_assessment", {})
+    """Exibe resumo legivel do relatorio no terminal.
+
+    Apresenta os dados lado a lado, sem emitir julgamento sobre isolamento —
+    ver a justificativa em _slice_comparison.
+    """
+    comp = report.get("comparativo_por_fatia", {})
+    por_fatia = comp.get("por_fatia", {})
+    compartilhados = comp.get("compartilhados", {})
+
+    def _c(d, campo, casas=2):
+        if isinstance(d, dict) and d.get(campo) is not None:
+            return f"{d[campo]:.{casas}f}"
+        return "-"
 
     if HAS_RICH:
-        # Tabela de estatísticas
-        tbl = Table(title="Resumo Estatístico (últimos 30min)", box=box.SIMPLE_HEAVY)
-        tbl.add_column("Métrica",  style="bold")
-        tbl.add_column("Min",  justify="right")
-        tbl.add_column("Mean", justify="right")
-        tbl.add_column("P95",  justify="right")
-        tbl.add_column("Max",  justify="right")
+        tbl = Table(
+            title="Comparativo por fatia (ultimos 30 min)",
+            box=box.SIMPLE_HEAVY,
+        )
+        tbl.add_column("Fatia", style="bold")
+        tbl.add_column("RTT mediana (ms)", justify="right")
+        tbl.add_column("RTT p95 (ms)", justify="right")
+        tbl.add_column("Probe (mediana)", justify="right")
+        tbl.add_column("CPU UPF (%)", justify="right")
+        tbl.add_column("CPU UE (%)", justify="right")
+        tbl.add_column("Amostras", justify="right")
 
-        labels = {
-            "ue1_latency_ms":   "UE1 Latência (ms)",
-            "ue2_latency_ms":   "UE2 Latência (ms)",
-            "ue1_probe_success": "UE1 Probe Success",
-            "ue2_probe_success": "UE2 Probe Success",
-            "amf_reg_rate":     "AMF Reg Rate (r/s)",
-        }
-
-        for key, label in labels.items():
-            s = stats.get(key)
-            if s and isinstance(s, dict) and "mean" in s:
-                tbl.add_row(
-                    label,
-                    str(s["min"]),
-                    str(s["mean"]),
-                    str(s["p95"]),
-                    str(s["max"]),
-                )
-            else:
-                tbl.add_row(label, "-", "-", "-", "-")
-
+        for nome, v in por_fatia.items():
+            rtt = v.get("rtt_ms") or {}
+            tbl.add_row(
+                nome.replace("_", " ").capitalize(),
+                _c(v.get("rtt_ms"), "median"),
+                _c(v.get("rtt_ms"), "p95"),
+                _c(v.get("probe_success"), "median"),
+                _c(v.get("upf_cpu_pct"), "median"),
+                _c(v.get("ue_cpu_pct"), "median"),
+                str(rtt.get("count", "-")),
+            )
         console.print(tbl)
 
-        # Veredicto de isolamento
-        verdict = assessment.get("verdict", "INDETERMINADO")
-        color = {
-            "ISOLAMENTO OK": "green",
-            "ISOLAMENTO PARCIAL": "yellow",
-            "POSSIVEL FALHA DE ISOLAMENTO": "red",
-        }.get(verdict, "white")
+        tbl2 = Table(
+            title="Componentes compartilhados — variavel de controle",
+            box=box.SIMPLE_HEAVY,
+        )
+        tbl2.add_column("Componente", style="bold")
+        tbl2.add_column("CPU mediana (%)", justify="right")
+        tbl2.add_column("CPU p95 (%)", justify="right")
+        tbl2.add_column("CPU max (%)", justify="right")
+        for nome, v in compartilhados.items():
+            tbl2.add_row(
+                nome,
+                _c(v.get("cpu_pct"), "median"),
+                _c(v.get("cpu_pct"), "p95"),
+                _c(v.get("cpu_pct"), "max"),
+            )
+        console.print(tbl2)
 
         console.print(Panel(
-            "\n".join([f"[{color}]{verdict}[/{color}]"] + assessment.get("reasons", [])),
-            title="[bold]Avaliação de Isolamento[/bold]",
-            border_style=color,
+            comp.get("nota", ""),
+            title="[bold]Como ler estes numeros[/bold]",
+            border_style="cyan",
         ))
     else:
-        print("\n=== Resumo Estatístico (últimos 30min) ===")
-        for key, s in stats.items():
-            if s and isinstance(s, dict) and "mean" in s:
-                print(f"  {key}: min={s['min']} mean={s['mean']} p95={s['p95']} max={s['max']}")
-        print(f"\nVeredicto: {assessment.get('verdict', 'INDETERMINADO')}")
-        for r in assessment.get("reasons", []):
-            print(f"  - {r}")
+        print("\n=== Comparativo por fatia (ultimos 30 min) ===")
+        for nome, v in por_fatia.items():
+            rtt = v.get("rtt_ms") or {}
+            print(f"  {nome}: RTT mediana={_c(v.get('rtt_ms'), 'median')} ms "
+                  f"p95={_c(v.get('rtt_ms'), 'p95')} ms | "
+                  f"CPU UPF={_c(v.get('upf_cpu_pct'), 'median')}% | "
+                  f"CPU UE={_c(v.get('ue_cpu_pct'), 'median')}% | "
+                  f"amostras={rtt.get('count', '-')}")
+        print("\n=== Componentes compartilhados (variavel de controle) ===")
+        for nome, v in compartilhados.items():
+            print(f"  {nome}: CPU mediana={_c(v.get('cpu_pct'), 'median')}% "
+                  f"p95={_c(v.get('cpu_pct'), 'p95')}% "
+                  f"max={_c(v.get('cpu_pct'), 'max')}%")
+        print("\n" + comp.get("nota", ""))
 
 
 def cmd_open_grafana():
