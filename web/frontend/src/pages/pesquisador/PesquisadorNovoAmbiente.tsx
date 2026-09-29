@@ -85,8 +85,8 @@ export default function PesquisadorNovo() {
       await stopEnvironment()
       setConflict(false)
       setError('Ambiente sendo encerrado. Aguarde terminar e tente criar novamente.')
-    } catch {
-      setError('Falha ao parar o ambiente.')
+    } catch(err) {
+      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
     } finally {
       setStopping(false)
     }

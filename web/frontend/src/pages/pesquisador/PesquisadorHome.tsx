@@ -72,8 +72,9 @@ export default function PesquisadorHome() {
     try {
       await stopEnvironment()
       await load()
-    } catch {
-      setError('Falha ao parar o ambiente.')
+    } catch(err) {
+      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      await load()
     } finally {
       setStopping(false)
     }

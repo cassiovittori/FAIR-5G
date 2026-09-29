@@ -1,5 +1,6 @@
 import subprocess
 import os
+import threading
 import asyncio
 import shlex
 import time
@@ -47,6 +48,7 @@ def on_startup():
             admin_password = os.environ.get("FAIR5G_ADMIN_PASSWORD", "admin000")
             create_user(session, email=admin_email, password_hash=hash_password(admin_password), role="admin")
             print(f"[auth] admin criado: {admin_email}")
+            reconcile_stuck_runs(session)
 
 
 class UpRequest(BaseModel):
@@ -148,17 +150,26 @@ def build_up_args(config: UpRequest) -> list[str]:
     return args
 
 UP_TIMEOUT = 15 * 60  # segundos
+DOWN_TIMEOUT = 10 * 60  # segundos
 
-def wait_for_up_completion(run_id: str, log_path: str):
-    deadline = time.time() + UP_TIMEOUT
+def _read_finish(log_path: str):
+    """None = ainda não terminou; True/False = terminou com/sem exit code 0."""
+    if not os.path.exists(log_path):
+        return None
+    with open(log_path, errors="ignore") as f:
+        content = f.read()
+    if "Script done on" not in content:
+        return None
+    return 'COMMAND_EXIT_CODE="0"' in content
+
+def wait_for_up_completion(run_id: str, log_path: str, timeout: float = UP_TIMEOUT):
+    deadline = time.time() + timeout
     ok = None
     while time.time() < deadline:
-        if os.path.exists(log_path):
-            with open(log_path, errors="ignore") as f:
-                content = f.read()
-            if "Script done on" in content:
-                ok = 'COMMAND_EXIT_CODE="0"' in content
-                break
+        finished = _read_finish(log_path)
+        if finished is not None:
+            ok = finished
+            break
         time.sleep(2)
 
     with Session(engine) as session:
@@ -263,21 +274,66 @@ async def stream_down_logs(
     return StreamingResponse(tail_log(log_path), media_type="text/event-stream")
 
 
-def wait_for_down_completion(run_id: str, log_path: str):
-    while not os.path.exists(log_path):
-        time.sleep(0.5)
-
-    with open(log_path, "r") as f:
-        while True:
-            line = f.readline()
-            if line:
-                if line.startswith("Script done on"):
-                    break
-            else:
-                time.sleep(0.5)
+def wait_for_down_completion(run_id: str, log_path: str, timeout: float = DOWN_TIMEOUT):
+    deadline = time.time() + timeout
+    finished = None
+    while time.time() < deadline:
+        finished = _read_finish(log_path)
+        if finished is not None:
+            break
+        time.sleep(1)
 
     with Session(engine) as session:
-        update_run(session, run_id, status="stopped", stopped_at=datetime.now(timezone.utc))
+        if finished is None:
+            # down não terminou no prazo: libera o lock e sinaliza o problema
+            update_run(session, run_id, status="error")
+        else:
+            update_run(session, run_id, status="stopped", stopped_at=datetime.now(timezone.utc))
+
+def _aware(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)  # SQLite devolve naive
+
+
+def _spawn(target, *args):
+    threading.Thread(target=target, args=args, daemon=True).start()
+
+
+def reconcile_stuck_runs(session):
+    """Roda no startup: runs presos em starting/stopping (ex.: reload no meio da subida)."""
+    stuck = [r for r in list_runs(session) if r.status in ("starting", "stopping")]
+    for run in stuck:
+        # copia os campos antes: o update_run faz commit e expira o objeto
+        run_id, status, log_path = run.run_id, run.status, run.log_path
+        started = _aware(run.started_at) or _aware(run.created_at)
+
+        if status == "starting":
+            finished = _read_finish(log_path)
+            if finished is not None:
+                new = "running" if finished else "error"
+                update_run(session, run_id, status=new)
+                print(f"[reconcile] {run_id}: starting -> {new} (pelo log)", flush=True)
+                continue
+            age = (datetime.now(timezone.utc) - started).total_seconds() if started else UP_TIMEOUT
+            remaining = UP_TIMEOUT - age
+            if remaining <= 0:
+                update_run(session, run_id, status="error")
+                print(f"[reconcile] {run_id}: starting -> error (passou de {UP_TIMEOUT // 60} min)", flush=True)
+            else:
+                _spawn(wait_for_up_completion, run_id, log_path, remaining)
+                print(f"[reconcile] {run_id}: starting, esperando o log terminar ({int(remaining)}s restantes)", flush=True)
+
+        else:  # stopping
+            down_log = os.path.join(os.path.dirname(log_path), "down.log")
+            if _read_finish(down_log) is not None:
+                # hora real do fim = última escrita do log
+                stopped_at = datetime.fromtimestamp(os.path.getmtime(down_log), timezone.utc)
+                update_run(session, run_id, status="stopped", stopped_at=stopped_at)
+                print(f"[reconcile] {run_id}: stopping -> stopped (pelo log)", flush=True)
+            else:
+                _spawn(wait_for_down_completion, run_id, down_log)
+                print(f"[reconcile] {run_id}: stopping, esperando o down.log terminar", flush=True)
 
 
 @app.post("/down")
@@ -290,7 +346,14 @@ def stop_testbed(
 ):
     active = get_active_run(session)
     if active is None:
-        raise HTTPException(status_code=409, detail="Nenhum ambiente ativo pra derrubar (pode estar sendo criado ou encerrado.)")
+        busy = get_busy_run(session)
+        if busy is not None and busy.status == "starting":
+            detail = "O ambiente ainda está sendo criado. Aguarde ele ficar ativo para poder pará-lo."
+        elif busy is not None and busy.status == "stopping":
+            detail = "O ambiente já está sendo encerrado."
+        else:
+            detail = "Nenhum ambiente ativo para parar."
+        raise HTTPException(status_code=409, detail=detail)
 
     down_log_path = os.path.join(REPO_ROOT, "runs", active.run_id, "down.log")
     os.makedirs(os.path.dirname(down_log_path), exist_ok=True)

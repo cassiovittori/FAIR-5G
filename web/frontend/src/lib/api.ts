@@ -190,7 +190,10 @@ export async function stopEnvironment(): Promise<{ run_id: string; status: strin
     method: "POST",
     headers: { Authorization: `Bearer ${getToken()}` },
   })
-  if (!res.ok) throw new Error("falha ao parar o ambiente")
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(typeof data?.detail === "string" ? data.detail : "Falha ao parar o ambiente.", res.status)
+  }
   return res.json()
 }
 

@@ -232,8 +232,9 @@ export default function PesquisadorMonitoramento() {
     try {
       await stopEnvironment()
       await refresh()
-    } catch {
-      setError('Falha ao parar o ambiente.')
+    } catch(err) {
+      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      await refresh()
     } finally {
       setStopping(false)
     }
