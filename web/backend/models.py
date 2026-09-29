@@ -1,5 +1,6 @@
 from datetime import datetime
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column
+from sqlalchemy import JSON
 
 
 class Run(SQLModel, table=True):
@@ -12,6 +13,7 @@ class Run(SQLModel, table=True):
     slice_count: int
     log_path: str
     user_id: int | None = Field(default=None, foreign_key="user.id")
+    config: dict | None = Field(default=None, sa_column=Column(JSON))
 
 class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)

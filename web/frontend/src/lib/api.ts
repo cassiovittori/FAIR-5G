@@ -95,18 +95,22 @@ export async function runBootstrap(force = false): Promise<{ status: string; mes
 }
 
 // lê o SSE via fetch (EventSource não manda Authorization header)
-export function streamBootstrapLogs(
+export function streamLogs(
+  path: string,
   onLine: (line: string) => void,
   onDone: () => void
 ): () => void {
   const controller = new AbortController()
 
-  fetch(`${API_URL}/logs/bootstrap`, {
+  fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${getToken()}` },
     signal: controller.signal,
   })
     .then(async (res) => {
-      if (!res.body) return
+      if (!res.ok || !res.body) {
+        onDone()
+        return
+      }
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
@@ -133,24 +137,28 @@ export function streamBootstrapLogs(
     })
     .catch((err) => {
       if (err.name !== "AbortError") {
-        console.error("stream de log do bootstrap caiu:", err)
+        console.error("stream de log caiu:", err)
         onDone()
       }
     })
 
-  return () => controller.abort() // cleanup no unmount
+  return () => controller.abort()
 }
+
+export const streamBootstrapLogs = (onLine: (line: string) => void, onDone: () => void) =>
+  streamLogs("/logs/bootstrap", onLine, onDone)
 
 //Runs
 export interface Run {
   id: number
   run_id: string
-  status: "created" | "running" | "stopping" | "stopped" | "error"
+  status: "created" |"starting"| "running" | "stopping" | "stopped" | "error"
   created_at: string
   started_at: string | null
   stopped_at: string | null
   slice_count: number
   log_path: string
+  config: Record<string, unknown> | null
 }
 
 export async function listRuns(): Promise<Run[]> {
@@ -182,3 +190,68 @@ export async function stopEnvironment(): Promise<{ run_id: string; status: strin
   if (!res.ok) throw new Error("falha ao parar o ambiente")
   return res.json()
 }
+
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+export type UpConfig = Record<string, number>
+
+export async function startEnvironment(config: UpConfig): Promise<{ run_id: string }> {
+  const res = await fetch(`${API_URL}/up`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    const msg = typeof data?.detail === "string" ? data.detail : `Erro ${res.status}`
+    throw new ApiError(msg, res.status)
+  }
+  return res.json()
+}
+
+// Métricas de rede (Prometheus via backend) ---------------------------------
+export interface SliceMetrics {
+  id: number
+  sessions: number | null
+  ping_ok: boolean | null
+  rtt_ms: number | null
+  upf_in_pps: number | null
+  upf_out_pps: number | null
+  ambr_down_mbps: number
+  ambr_up_mbps: number
+  qos_index: number
+}
+
+export type NetworkMetrics =
+  | { available: false; reason: string }
+  | { available: true; global: { ues: number | null; gnbs: number | null }; slices: SliceMetrics[] }
+
+export const networkMetrics = () => api.get<NetworkMetrics>("/metrics/network")
+
+export interface SeriesPoint { t: number; v: number | null }
+export interface SliceSeries { id: number; points: SeriesPoint[] }
+
+export type NetworkHistory =
+  | { available: false; reason: string }
+  | { available: true; step: number; minutes: number; series: Record<string, SliceSeries[]> }
+
+export const networkHistory = (minutes = 15, metrics?: string[]) =>
+  api.get<NetworkHistory>(
+    `/metrics/network/history?minutes=${minutes}` + (metrics?.length ? `&metrics=${metrics.join(",")}` : "")
+  )
+
+export interface NfStatus { job: string; instance: string; up: boolean; memory_mb: number | null }
+export type NetworkNfs =
+  | { available: false; reason: string }
+  | { available: true; nfs: NfStatus[] }
+
+export const networkNfs = () => api.get<NetworkNfs>("/metrics/network/nfs")

@@ -1,28 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-//import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listRuns, hostMetrics, stopEnvironment, type Run, type HostMetrics } from '@/lib/api'
-
-const STATUS_LABEL: Record<Run['status'], string> = {
-  created: 'criado', running: 'ativo', stopping: 'encerrando', stopped: 'encerrado', error: 'erro',
-}
-const STATUS_COLOR: Record<Run['status'], string> = {
-  created: '#64748B', running: '#0633FF', stopping: '#F5A623', stopped: '#64748B', error: '#FF3B5C',
-}
-
-function StatusDot({ status }: { status: Run['status'] }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLOR[status] }} />
-      {STATUS_LABEL[status]}
-    </span>
-  )
-}
+import { StatusDot } from '@/components/StatusDot'
 
 // backend ainda não tem campo "nome" no Run -- usando slice_count até decidirmos se cria um
 function environmentLabel(run: Run) {
@@ -51,6 +36,7 @@ export default function PesquisadorHome() {
 
   useEffect(() => { load() }, [])
 
+  // métricas do host
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -63,7 +49,23 @@ export default function PesquisadorHome() {
   }, [])
 
   const active = runs?.filter((r) => r.status === 'running') ?? []
+  const starting = runs?.filter((r) => r.status === 'starting') ?? []
+  const stoppingRuns = runs?.filter((r) => r.status === 'stopping') ?? []
   const recent = runs?.slice(0, 5) ?? []
+  const inTransition = starting.length > 0 || stoppingRuns.length > 0
+
+  // polling dos runs só enquanto algum ambiente está subindo ou descendo
+  // (chama listRuns direto, sem passar pelo load(), pra não piscar o skeleton)
+  useEffect(() => {
+    if (!inTransition) return
+    const interval = setInterval(async () => {
+      try {
+        setRuns(await listRuns())
+      } catch {
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [inTransition])
 
   async function handleStop() {
     setStopping(true)
@@ -95,93 +97,125 @@ export default function PesquisadorHome() {
 
       <section className="space-y-3">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground">AMBIENTES RECENTES</h2>
-        <Card className='pt-2 px-3 pb-0 gap-0'>
-            <Table>
+        <Card className="pt-2 px-3 pb-0 gap-0">
+          <Table>
             <TableHeader>
-                <TableRow>
+              <TableRow>
                 <TableHead>RUN_ID</TableHead>
                 <TableHead>NOME</TableHead>
                 <TableHead>STATUS</TableHead>
                 <TableHead className="text-right">AÇÕES</TableHead>
-                </TableRow>
+              </TableRow>
             </TableHeader>
             <TableBody>
-                {loading ? (
+              {loading ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                    <TableRow key={i}>
+                  <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-20" /></TableCell>
-                    </TableRow>
+                  </TableRow>
                 ))
-                ) : recent.length === 0 ? (
+              ) : recent.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
                     Nenhum ambiente criado ainda.
-                    </TableCell>
+                  </TableCell>
                 </TableRow>
-                ) : (
+              ) : (
                 recent.map((run) => (
-                    <TableRow key={run.run_id}>
+                  <TableRow key={run.run_id}>
                     <TableCell className="font-mono text-xs">{run.run_id}</TableCell>
                     <TableCell>{environmentLabel(run)}</TableCell>
                     <TableCell><StatusDot status={run.status} /></TableCell>
                     <TableCell className="space-x-3 text-right text-sm">
-                        {run.status === 'running' ? (
+                      {run.status === 'running' ? (
                         <>
-                            <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Monitorar</Link>
-                            <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">Parar</button>
+                          <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Monitorar</Link>
+                          <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">Parar</button>
                         </>
-                        ) : (
+                      ) : run.status === 'starting' ? (
+                        <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Acompanhar</Link>
+                      ) : run.status === 'stopping' ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
                         <>
-                            <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">Ver</Link>
-                            <Link to="/pesquisador/novo" className="text-muted-foreground hover:underline">Duplicar</Link>
+                          <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">Ver</Link>
+                          <Link to="/pesquisador/novo" className="text-muted-foreground hover:underline">Duplicar</Link>
                         </>
-                        )}
+                      )}
                     </TableCell>
-                    </TableRow>
+                  </TableRow>
                 ))
-                )}
+              )}
             </TableBody>
-            </Table>
-            <div className="flex items-center justify-between border-t p-4">
+          </Table>
+          <div className="flex items-center justify-between border-t p-4">
             <Button asChild><Link to="/pesquisador/novo">Criar ambiente</Link></Button>
             <Link to="/pesquisador/ambientes" className="text-sm text-muted-foreground hover:underline">Ver todos ›</Link>
-            </div>
+          </div>
         </Card>
-        </section>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-            <CardHeader>
-                <CardTitle className="text-xs tracking-wide text-muted-foreground">AMBIENTE ATIVO</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {loading ? (
-                <div className="space-y-3">
-                    <Skeleton className="h-8 w-32" />
-                    <Skeleton className="h-9 w-full" />
+          <CardHeader>
+            <CardTitle className="text-xs tracking-wide text-muted-foreground">AMBIENTE ATIVO</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : active.length > 0 ? (
+              <>
+                <div className="space-y-1">
+                  <p className="text-l font-semibold">{active[0].run_id}</p>
+                  <StatusDot status={active[0].status} />
                 </div>
-                ) : active.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum ambiente ativo no momento.</p>
-                ) : (
-                <>
-                    <div className="space-y-1">
-                    <p className="text-l font-semibold">{active[0].run_id}</p>
-                    <StatusDot status={active[0].status} />
-                    </div>
-                    <div className="flex gap-2">
-                    <Button asChild className="flex-1">
-                        <Link to="/pesquisador/monitoramento">Monitorar</Link>
-                    </Button>
-                    <Button variant="outline" className="flex-1 hover:!border-destructive hover:!bg-destructive hover:!text-destructive-foreground" onClick={handleStop} disabled={stopping}>
-                        {stopping ? "Parando..." : "Parar"}
-                    </Button>
-                    </div>
-                </>
-                )}
-            </CardContent>
+                <div className="flex gap-2">
+                  <Button asChild className="flex-1">
+                    <Link to="/pesquisador/monitoramento">Monitorar</Link>
+                  </Button>
+                  <Button variant="outline" className="flex-1 hover:!border-destructive hover:!bg-destructive hover:!text-destructive-foreground" onClick={handleStop} disabled={stopping}>
+                    {stopping ? 'Parando...' : 'Parar'}
+                  </Button>
+                </div>
+              </>
+            ) : starting.length > 0 ? (
+              <>
+                <div className="space-y-1">
+                  <p className="text-l font-semibold">{starting[0].run_id}</p>
+                  <StatusDot status={starting[0].status} />
+                </div>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Aguardando o ambiente ficar ativo...
+                </p>
+                <div className="flex gap-2">
+                  <Button asChild className="flex-1">
+                    <Link to="/pesquisador/monitoramento">Acompanhar</Link>
+                  </Button>
+                  <Button variant="outline" className="flex-1" disabled>Parar</Button>
+                </div>
+              </>
+            ) : stoppingRuns.length > 0 ? (
+              <>
+                <div className="space-y-1">
+                  <p className="text-l font-semibold">{stoppingRuns[0].run_id}</p>
+                  <StatusDot status={stoppingRuns[0].status} />
+                </div>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Encerrando o ambiente...
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum ambiente ativo no momento.</p>
+            )}
+          </CardContent>
         </Card>
 
         <Card>

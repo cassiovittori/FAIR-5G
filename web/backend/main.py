@@ -7,18 +7,21 @@ import shutil
 import psutil
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, Field, Column
+from sqlalchemy import JSON
 
 from models import User
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from users_store import create_user, get_user_by_email, any_admin_exists
 from db import create_db_and_tables, get_session, engine
-from runs_store import create_run, update_run, get_run, get_active_run, list_runs
+from runs_store import create_run, update_run, get_run, get_active_run, list_runs, get_busy_run
+from network_metrics import collect_network_metrics, collect_network_history, collect_nfs, HISTORY
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -47,7 +50,8 @@ def on_startup():
 
 
 class UpRequest(BaseModel):
-    slice_count: int = 2
+    slices: int = Field(2, ge=1, le=8)
+
 
 
 class RegisterRequest(BaseModel):
@@ -137,28 +141,62 @@ async def stream_bootstrap_logs(current_user: User = Depends(get_current_user)):
     log_path = os.path.join(REPO_ROOT, "logs", "bootstrap.log")
     return StreamingResponse(tail_log(log_path), media_type="text/event-stream")
 
+def build_up_args(config: UpRequest) -> list[str]:
+    args = ["--slices", str(config.slices)]
+    # campo novo do upstream = uma linha nova aqui
+    return args
+
+UP_TIMEOUT = 15 * 60  # segundos
+
+def wait_for_up_completion(run_id: str, log_path: str):
+    deadline = time.time() + UP_TIMEOUT
+    ok = None
+    while time.time() < deadline:
+        if os.path.exists(log_path):
+            with open(log_path, errors="ignore") as f:
+                content = f.read()
+            if "Script done on" in content:
+                ok = 'COMMAND_EXIT_CODE="0"' in content
+                break
+        time.sleep(2)
+
+    with Session(engine) as session:
+        update_run(session, run_id, status="running" if ok else "error")
 
 @app.post("/up")
 def start_testbed(
     body: UpRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    if get_active_run(session) is not None:
-        raise HTTPException(status_code=409, detail="já existe um ambiente rodando")
+    busy = get_busy_run(session)
+    if busy is not None:
+        estados = {"starting": "sendo criado", "running": "ativo", "stopping": "sendo encerrado"}
+        raise HTTPException(status_code=409, detail=f"já existe um ambiente {estados[busy.status]}")
 
     run_id = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "up.log")
 
-    create_run(session, run_id=run_id, slice_count=body.slice_count, log_path=log_path, user_id=current_user.id)
-
-    subprocess.Popen(
-        ["sudo", "-n", "FAIR5G_NO_CLI=1", "python3", "fair5gctl.py", "up", "--run-id", run_id],
-        cwd=REPO_ROOT,
+    create_run(
+        session,
+        run_id=run_id,
+        slice_count=body.slices,
+        config=body.model_dump(),
+        log_path=log_path,
+        user_id=current_user.id,
     )
 
-    update_run(session, run_id, status="running", started_at=datetime.now(timezone.utc))
+    subprocess.Popen(
+        ["sudo", "-n", "FAIR5G_NO_CLI=1", "python3", "fair5gctl.py", "up",
+        "--run-id", run_id, *build_up_args(body)],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
+    update_run(session, run_id, status="starting", started_at=datetime.now(timezone.utc))
+    background_tasks.add_task(wait_for_up_completion, run_id, log_path)
     return {"run_id": run_id}
 
 
@@ -249,7 +287,7 @@ def stop_testbed(
 ):
     active = get_active_run(session)
     if active is None:
-        raise HTTPException(status_code=409, detail="nenhum ambiente ativo pra derrubar")
+        raise HTTPException(status_code=409, detail="Nenhum ambiente ativo pra derrubar (pode estar sendo criado ou encerrado.)")
 
     down_log_path = os.path.join(REPO_ROOT, "runs", active.run_id, "down.log")
     os.makedirs(os.path.dirname(down_log_path), exist_ok=True)
@@ -313,3 +351,57 @@ def host_metrics(current_user: User = Depends(get_current_user)):
         "cpu_percent": psutil.cpu_percent(interval=None),
         "memory_percent": psutil.virtual_memory().percent,
     }
+
+@app.get("/metrics/network")
+def network_metrics(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    run = get_active_run(session)
+    if run is None:
+        return {"available": False, "reason": "nenhum ambiente ativo"}
+    try:
+        return {"available": True, **collect_network_metrics(run.slice_count)}
+    except OSError:  # Prometheus fora do ar ou lento (inclui URLError e timeout)
+        return {"available": False, "reason": "prometheus indisponível"}
+    
+@app.get("/metrics/network/history")
+def network_history(
+    minutes: int = Query(15, ge=1, le=120),
+    metrics: str | None = Query(None),  # ex: packet_loss,jitter_ms
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    names = [n.strip() for n in metrics.split(",") if n.strip()] if metrics else None
+    if names:
+        invalid = [n for n in names if n not in HISTORY]
+        if invalid:
+            raise HTTPException(status_code=422, detail=f"métricas desconhecidas: {invalid}")
+
+    run = get_active_run(session)
+    if run is None:
+        return {"available": False, "reason": "nenhum ambiente ativo"}
+
+    started = run.started_at
+    since = None
+    if started:
+        if started.tzinfo is None:  # o SQLite pode devolver sem timezone
+            started = started.replace(tzinfo=timezone.utc)
+        since = started.timestamp()
+
+    try:
+        return {"available": True, **collect_network_history(run.slice_count, minutes, since, names)}
+    except OSError:
+        return {"available": False, "reason": "prometheus indisponível"}
+
+@app.get("/metrics/network/nfs")
+def network_nfs(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if get_active_run(session) is None:
+        return {"available": False, "reason": "nenhum ambiente ativo"}
+    try:
+        return {"available": True, "nfs": collect_nfs()}
+    except OSError:
+        return {"available": False, "reason": "prometheus indisponível"}

@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
-from sqlmodel import Session, select
+from sqlmodel import Session, select, col
 from models import Run
 
+BUSY_STATUSES = ("starting", "running", "stopping")
 
-def create_run(session: Session, run_id: str, slice_count: int, log_path: str, user_id: int) -> Run:
+def get_busy_run(session: Session) -> Run | None:
+    return session.exec(select(Run).where(col(Run.status).in_(BUSY_STATUSES))).first()
+
+
+def create_run(session: Session, run_id: str, slice_count: int, log_path: str, user_id: int, config: dict | None) -> Run:
     run = Run(
         run_id=run_id,
         status="created",
@@ -11,6 +16,7 @@ def create_run(session: Session, run_id: str, slice_count: int, log_path: str, u
         slice_count=slice_count,
         log_path=log_path,
         user_id=user_id,
+        config=config
     )
     session.add(run)
     session.commit()

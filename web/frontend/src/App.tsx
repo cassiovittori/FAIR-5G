@@ -10,6 +10,8 @@ import { BootstrapGate } from './components/BoostrapGate'
 import AppShell from './components/AppShell'
 import PesquisadorShell from './components/PesquisadorShell'
 import PesquisadorHome from './pages/pesquisador/PesquisadorHome'
+import PesquisadorNovoAmbiente from './pages/pesquisador/PesquisadorNovoAmbiente'
+import PesquisadorMonitoramento from './pages/pesquisador/PesquisadorMonitoramento'
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
           <Route element={<AppShell />}>
             <Route element={<PesquisadorShell />}>
               <Route path="/pesquisador" element={<PesquisadorHome />} />
+              <Route path="/pesquisador/novo" element={<PesquisadorNovoAmbiente />} />
+              <Route path="/pesquisador/monitoramento" element={<PesquisadorMonitoramento />} />
             </Route>
             <Route path="/tutorial" element={<Trilha />} />
           </Route>
