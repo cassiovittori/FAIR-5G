@@ -12,6 +12,8 @@ import PesquisadorShell from './components/PesquisadorShell'
 import PesquisadorHome from './pages/pesquisador/PesquisadorHome'
 import PesquisadorNovoAmbiente from './pages/pesquisador/PesquisadorNovoAmbiente'
 import PesquisadorMonitoramento from './pages/pesquisador/PesquisadorMonitoramento'
+import PesquisadorAmbientes from './pages/pesquisador/PesquisadorAmbientes'
+import PesquisadorAmbienteDetalhe from './pages/pesquisador/PesquisadorAmbienteDetalhe'
 
 function App() {
   return (
@@ -29,6 +31,9 @@ function App() {
               <Route path="/pesquisador" element={<PesquisadorHome />} />
               <Route path="/pesquisador/novo" element={<PesquisadorNovoAmbiente />} />
               <Route path="/pesquisador/monitoramento" element={<PesquisadorMonitoramento />} />
+              <Route path="/pesquisador/ambientes" element={<PesquisadorAmbientes />} />
+              <Route path="/pesquisador/ambientes-ativos" element={<PesquisadorAmbientes onlyActive />} />
+              <Route path="/pesquisador/ambientes/:runId" element={<PesquisadorAmbienteDetalhe />} /> 
             </Route>
             <Route path="/tutorial" element={<Trilha />} />
           </Route>

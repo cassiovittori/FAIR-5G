@@ -6,6 +6,7 @@ from sqlalchemy import JSON
 class Run(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     run_id: str = Field(unique=True, index=True)
+    nome: str | None = Field(default=None, max_length=60)
     status: str = "created"          # created | running | stopping | stopped | error
     created_at: datetime
     started_at: datetime | None = None

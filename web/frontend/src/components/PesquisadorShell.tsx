@@ -11,7 +11,17 @@ const AMBIENTES_ITEMS = [
 
 export default function PesquisadorShell() {
   const [collapsed, setCollapsed] = useState(false)
-  const location = useLocation()
+  const { pathname } = useLocation()
+
+  const inMenu = pathname === "/pesquisador"
+  const inAmbientes = pathname.startsWith("/pesquisador/ambientes") // inclui ambientes-ativos e /ambientes/:runId
+  const inMonitoramento = pathname === "/pesquisador/monitoramento"
+
+  // "Todos os Ambientes" também vale para o detalhe de um run
+  const isSubActive = (to: string) =>
+    to === "/pesquisador/ambientes"
+      ? pathname === to || pathname.startsWith("/pesquisador/ambientes/")
+      : pathname === to
 
   return (
     <div className="flex min-h-screen">
@@ -27,9 +37,13 @@ export default function PesquisadorShell() {
           <Button className="w-full" asChild>
             <Link to="/pesquisador/novo">{collapsed ? "+" : "Criar ambiente"}</Link>
           </Button>
-          <Button variant="outline" className="w-full justify-start gap-2" asChild>
+          <Button
+            variant={`${inMenu ? "secondary" : "ghost"}`}
+            className={`w-full justify-center gap-2 ${inMenu ? "border-[#FFFFFF] bg-black" : ""}`}
+            asChild
+          >
             <Link to="/pesquisador">
-              <LayoutGrid className="h-4 w-4" />
+              <LayoutGrid className={`h-4 w-4 ${inMenu ? "text-[#FFFFFF]" : ""}`} />
               {!collapsed && "Menu"}
             </Link>
           </Button>
@@ -41,40 +55,43 @@ export default function PesquisadorShell() {
               <p className="px-2 text-xs font-medium text-muted-foreground">MÓDULOS</p>
               <div className="mt-2 space-y-1">
                 <Collapsible defaultOpen>
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                  <CollapsibleTrigger
+                    className={`group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted ${
+                      inAmbientes ? "font-medium text-foreground" : ""
+                    }`}
+                  >
                     <span className="flex items-center gap-2">
-                      <Boxes className="h-4 w-4" />
+                      <Boxes className={`h-4 w-4 ${inAmbientes ? "text-[#0633FF]" : ""}`} />
                       Ambientes
                     </span>
                     <ChevronDown className="h-3 w-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="ml-6 space-y-1 overflow-hidden border-l pl-3 data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-                    {AMBIENTES_ITEMS.map((item) => {
-                      const active = location.pathname === item.to
-                      return (
-                        <Link
-                          key={item.to}
-                          to={item.to}
-                          className={`block rounded-md px-2 py-1 text-sm ${
-                            active ? "border-l-2 border-[#0633FF] font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {item.label}
-                        </Link>
-                      )
-                    })}
+                    {AMBIENTES_ITEMS.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`block rounded-md px-2 py-1 text-sm ${
+                          isSubActive(item.to)
+                            ? "border-l-2 border-[#0633FF] font-medium text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
                   </CollapsibleContent>
                 </Collapsible>
 
                 <Link
                   to="/pesquisador/monitoramento"
                   className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                    location.pathname === "/pesquisador/monitoramento"
+                    inMonitoramento
                       ? "font-medium text-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  <Activity className="h-4 w-4" />
+                  <Activity className={`h-4 w-4 ${inMonitoramento ? "text-[#F5A623]" : ""}`} />
                   Monitoramento
                 </Link>
               </div>

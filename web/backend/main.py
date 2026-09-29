@@ -51,6 +51,7 @@ def on_startup():
 
 class UpRequest(BaseModel):
     slices: int = Field(2, ge=1, le=8)
+    nome: str | None = Field(None, max_length=60)
 
 
 
@@ -177,10 +178,12 @@ def start_testbed(
 
     run_id = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "up.log")
+    nome = (body.nome or "").strip() or None
 
     create_run(
         session,
         run_id=run_id,
+        nome=nome,
         slice_count=body.slices,
         config=body.model_dump(),
         log_path=log_path,

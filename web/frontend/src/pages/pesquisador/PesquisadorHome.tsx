@@ -142,7 +142,7 @@ export default function PesquisadorHome() {
                       ) : (
                         <>
                           <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">Ver</Link>
-                          <Link to="/pesquisador/novo" className="text-muted-foreground hover:underline">Duplicar</Link>
+                          <Link to={`/pesquisador/novo?from=${run.run_id}`} className="text-muted-foreground hover:underline">Duplicar</Link>
                         </>
                       )}
                     </TableCell>

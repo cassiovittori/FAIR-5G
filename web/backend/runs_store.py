@@ -8,9 +8,10 @@ def get_busy_run(session: Session) -> Run | None:
     return session.exec(select(Run).where(col(Run.status).in_(BUSY_STATUSES))).first()
 
 
-def create_run(session: Session, run_id: str, slice_count: int, log_path: str, user_id: int, config: dict | None) -> Run:
+def create_run(session: Session, nome: str | None, run_id: str, slice_count: int, log_path: str, user_id: int, config: dict | None) -> Run:
     run = Run(
         run_id=run_id,
+        nome=nome,
         status="created",
         created_at=datetime.now(timezone.utc),
         slice_count=slice_count,

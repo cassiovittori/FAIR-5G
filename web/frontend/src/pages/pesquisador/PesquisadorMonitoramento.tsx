@@ -16,6 +16,7 @@ import {
   listRuns, networkHistory, networkMetrics, networkNfs, stopEnvironment, streamLogs,
   type NetworkMetrics, type NetworkNfs, type Run, type SliceSeries,
 } from '@/lib/api'
+import { environmentLabel } from '@/lib/runs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const POLL_MS = 5000
@@ -273,7 +274,8 @@ export default function PesquisadorMonitoramento() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Monitoramento</h1>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-sm">{run.run_id}</span>
+            <span className="text-sm">{environmentLabel(run)}</span>
+            <span className="font-mono text-xs text-muted-foreground">{run.run_id}</span>
             <StatusDot status={run.status} />
             <span className="text-sm text-muted-foreground">
               {run.slice_count} fatia{run.slice_count === 1 ? '' : 's'}

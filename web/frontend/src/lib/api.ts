@@ -152,6 +152,7 @@ export const streamBootstrapLogs = (onLine: (line: string) => void, onDone: () =
 export interface Run {
   id: number
   run_id: string
+  nome: string | null
   status: "created" |"starting"| "running" | "stopping" | "stopped" | "error"
   created_at: string
   started_at: string | null
@@ -160,6 +161,8 @@ export interface Run {
   log_path: string
   config: Record<string, unknown> | null
 }
+
+export const getRun = (runId: string) => api.get<Run>(`/runs/${runId}`)
 
 export async function listRuns(): Promise<Run[]> {
   const res = await fetch(`${API_URL}/runs`, {
@@ -201,14 +204,14 @@ export class ApiError extends Error {
 
 export type UpConfig = Record<string, number>
 
-export async function startEnvironment(config: UpConfig): Promise<{ run_id: string }> {
+export async function startEnvironment(config: UpConfig, nome?: string): Promise<{ run_id: string }> {
   const res = await fetch(`${API_URL}/up`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    body: JSON.stringify(config),
+    body: JSON.stringify(nome ? { ...config, nome } : config),
   })
   if (!res.ok) {
     const data = await res.json().catch(() => null)
