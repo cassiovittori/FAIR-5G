@@ -34,16 +34,16 @@ export default function PesquisadorShell() {
         </div>
 
         <div className="space-y-2 px-3">
-          <Button className="w-full" asChild>
+          <Button className="w-full bg-[#0633FF] text-white hover:bg-[#0633FF]/90" asChild>
             <Link to="/pesquisador/novo">{collapsed ? "+" : "Criar ambiente"}</Link>
           </Button>
           <Button
-            variant={`${inMenu ? "secondary" : "ghost"}`}
-            className={`w-full justify-center gap-2 ${inMenu ? "border-[#FFFFFF] bg-black" : ""}`}
+            variant={inMenu ? "secondary" : "ghost"}
+            className={`w-full justify-center gap-2 ${inMenu ? "border border-[#0633FF] bg-muted text-foreground dark:border-white" : ""}`}
             asChild
           >
             <Link to="/pesquisador">
-              <LayoutGrid className={`h-4 w-4 ${inMenu ? "text-[#FFFFFF]" : ""}`} />
+              <LayoutGrid className={`h-4 w-4 ${inMenu ? "text-[#0633FF] dark:text-white" : ""}`} />
               {!collapsed && "Menu"}
             </Link>
           </Button>

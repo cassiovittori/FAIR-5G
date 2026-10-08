@@ -127,12 +127,14 @@ export default function PesquisadorAmbienteDetalhe() {
       <section className="space-y-3">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground">CONFIGURAÇÃO USADA</h2>
         <Card className="divide-y">
-          {Object.entries(config).map(([key, value]) => (
-            <div key={key} className="flex items-center justify-between px-6 py-3 text-sm">
-              <span>{CAMPOS.find((c) => c.nome === key)?.label ?? key}</span>
-              <span className="font-mono">{String(value)}</span>
-            </div>
-          ))}
+          {Object.entries(config)
+            .filter(([key, value]) => key !== 'nome' && value != null)
+            .map(([key, value]) => (
+              <div key={key} className="flex items-center justify-between px-6 py-3 text-sm">
+                <span>{CAMPOS.find((c) => c.nome === key)?.label ?? key}</span>
+                <span className="font-mono">{String(value)}</span>
+              </div>
+            ))}
         </Card>
       </section>
 

@@ -18,16 +18,16 @@ import {
 } from '@/lib/api'
 import { environmentLabel } from '@/lib/runs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
+ 
 const POLL_MS = 5000
 const MAX_LOG_LINES = 500
 const SLICE_COLORS = ['#0633FF', '#F5A623', '#8B5CF6', '#22C55E', '#FF3B5C', '#06B6D4', '#EC4899', '#64748B']
-
+ 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g
-
+ 
 type Tab = 'geral' | 'rede' | 'controle' | 'nfs'
-
+ 
 interface ChartDef {
   tab: Tab
   title: string
@@ -36,18 +36,18 @@ interface ChartDef {
   // séries por fatia viram "Fatia N"; séries globais usam label/color daqui
   metrics: { name: string; label?: string; color?: string }[]
 }
-
+ 
 // gráfico novo = uma linha nova aqui (e a métrica precisa existir no HISTORY do backend)
 const CHARTS: ChartDef[] = [
   { tab: 'geral', title: 'LATÊNCIA (RTT ICMP)', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
   { tab: 'geral', title: 'TRÁFEGO NO UPF (ENTRADA)', unit: 'pacotes/s', metrics: [{ name: 'upf_in_pps' }] },
-
+ 
   { tab: 'rede', title: 'LATÊNCIA (RTT ICMP)', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
   { tab: 'rede', title: 'JITTER DO RTT', unit: 'ms', metrics: [{ name: 'jitter_ms' }] },
   { tab: 'rede', title: 'PERDA DE PACOTES', unit: '%', metrics: [{ name: 'packet_loss' }] },
   { tab: 'rede', title: 'TRÁFEGO NO UPF (ENTRADA)', unit: 'pacotes/s', metrics: [{ name: 'upf_in_pps' }] },
   { tab: 'rede', title: 'TRÁFEGO NO UPF (SAÍDA)', unit: 'pacotes/s', metrics: [{ name: 'upf_out_pps' }] },
-
+ 
   {
     tab: 'controle', title: 'AMF — REGISTRO INICIAL', unit: 'req/s',
     metrics: [
@@ -68,17 +68,17 @@ const CHARTS: ChartDef[] = [
   { tab: 'controle', title: 'SMF — QOS FLOWS', unit: 'flows', metrics: [{ name: 'smf_qos_flows' }] },
   { tab: 'controle', title: 'UPF — QOS FLOWS', unit: 'flows', metrics: [{ name: 'upf_qos_flows' }] },
 ]
-
+ 
 const metricsFor = (tab: Tab) =>
   [...new Set(CHARTS.filter((c) => c.tab === tab).flatMap((c) => c.metrics.map((m) => m.name)))]
-
+ 
 const sliceColor = (id: number) => SLICE_COLORS[(id - 1) % SLICE_COLORS.length]
 const fmt = (n: number | null | undefined, digits = 2) => (n == null ? '—' : n.toFixed(digits))
 const fmtTime = (t?: number) =>
   t == null ? '' : new Date(t * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
+ 
 interface Line { key: string; label: string; color: string; points: SliceSeries['points'] }
-
+ 
 function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: number | 'all'): Line[] {
   const lines: Line[] = []
   def.metrics.forEach((m, mi) => {
@@ -95,7 +95,7 @@ function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: nu
   })
   return lines
 }
-
+ 
 // junta as linhas em [{t, key1, key2, ...}] pro Recharts
 function toRows(lines: Line[]) {
   const byT = new Map<number, Record<string, number | null>>()
@@ -108,12 +108,12 @@ function toRows(lines: Line[]) {
   }
   return [...byT.values()].sort((a, b) => (a.t as number) - (b.t as number))
 }
-
+ 
 function MetricChart({ def, data, only }: { def: ChartDef; data: Record<string, SliceSeries[]> | null; only: number | 'all' }) {
   const lines = buildLines(def, data ?? {}, only)
   const rows = toRows(lines)
   const config = Object.fromEntries(lines.map((l) => [l.key, { label: l.label, color: l.color }])) as ChartConfig
-
+ 
   return (
     <Card>
       <CardHeader>
@@ -150,7 +150,7 @@ function MetricChart({ def, data, only }: { def: ChartDef; data: Record<string, 
     </Card>
   )
 }
-
+ 
 function ChartGrid({ tab, data, only }: { tab: Tab; data: Record<string, SliceSeries[]> | null; only: number | 'all' }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -160,7 +160,7 @@ function ChartGrid({ tab, data, only }: { tab: Tab; data: Record<string, SliceSe
     </div>
   )
 }
-
+ 
 export default function PesquisadorMonitoramento() {
   const [run, setRun] = useState<Run | null>(null)
   const [net, setNet] = useState<NetworkMetrics | null>(null)
@@ -171,10 +171,10 @@ export default function PesquisadorMonitoramento() {
   const [error, setError] = useState<string | null>(null)
   const [stopping, setStopping] = useState(false)
   const [lines, setLines] = useState<string[]>([])
-  const [showLog, setShowLog] = useState<boolean | null>(null) // null = padrão (aberto só no starting)
+  const [showLog, setShowLog] = useState<boolean | null>(null) // null = padrão (aberto no starting e no stopping)
   const logRef = useRef<HTMLPreElement>(null)
   const [slice, setSlice] = useState<number | 'all'>('all')
-
+ 
   async function refresh() {
     try {
       const runs = await listRuns()
@@ -202,7 +202,7 @@ export default function PesquisadorMonitoramento() {
       setLoading(false)
     }
   }
-
+ 
   // reinicia o polling quando troca de aba, pra buscar só as métricas dela
   useEffect(() => {
     refresh()
@@ -210,36 +210,40 @@ export default function PesquisadorMonitoramento() {
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
-
-  // log do up: reabre o stream só quando muda o run
+ 
+  // log: durante o encerramento lê o down.log; nos demais estados, o up.log.
+  // reabre o stream quando muda o run ou quando ele entra em encerramento
   const runId = run?.run_id
+  const stoppingRun = run?.status === 'stopping'
   useEffect(() => {
     if (!runId) return
     setLines([])
+    setShowLog(null) // volta ao padrão a cada fase
+    const path = stoppingRun ? `/logs/${runId}/down` : `/logs/${runId}`
     return streamLogs(
-      `/logs/${runId}`,
+      path,
       (line) => setLines((prev) => [...prev.slice(-(MAX_LOG_LINES - 1)), line.replace(ANSI, '')]),
       () => {}
     )
-  }, [runId])
-
+  }, [runId, stoppingRun])
+ 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [lines])
-
+ 
   async function handleStop() {
     setStopping(true)
     try {
       await stopEnvironment()
       await refresh()
-    } catch(err) {
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
       await refresh()
     } finally {
       setStopping(false)
     }
   }
-
+ 
   if (loading) {
     return (
       <div className="space-y-6 p-6">
@@ -251,7 +255,7 @@ export default function PesquisadorMonitoramento() {
       </div>
     )
   }
-
+ 
   if (!run) {
     return (
       <div className="space-y-6 p-6">
@@ -264,11 +268,11 @@ export default function PesquisadorMonitoramento() {
       </div>
     )
   }
-
-  const logOpen = showLog ?? run.status === 'starting'
+ 
+  const logOpen = showLog ?? (run.status === 'starting' || run.status === 'stopping')
   const running = run.status === 'running'
   const only = slice !== 'all' && slice > run.slice_count ? 'all' : slice
-
+ 
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
@@ -293,9 +297,9 @@ export default function PesquisadorMonitoramento() {
           </Button>
         )}
       </div>
-
+ 
       {error && <p className="text-sm text-destructive">{error}</p>}
-
+ 
       {!running && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -304,34 +308,34 @@ export default function PesquisadorMonitoramento() {
             : 'Encerrando o ambiente...'}
         </p>
       )}
-
+ 
       {running && net && 'reason' in net && (
         <p className="text-sm text-muted-foreground">Métricas de rede indisponíveis: {net.reason}.</p>
       )}
-
+ 
       {running && net?.available && (
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <TabsList>
-                <TabsTrigger value="geral">Visão geral</TabsTrigger>
-                <TabsTrigger value="rede">Latência e perda</TabsTrigger>
-                <TabsTrigger value="controle">Plano de controle</TabsTrigger>
-                <TabsTrigger value="nfs">Saúde dos NFs</TabsTrigger>
+              <TabsTrigger value="geral">Visão geral</TabsTrigger>
+              <TabsTrigger value="rede">Latência e perda</TabsTrigger>
+              <TabsTrigger value="controle">Plano de controle</TabsTrigger>
+              <TabsTrigger value="nfs">Saúde dos NFs</TabsTrigger>
             </TabsList>
-
+ 
             {tab !== 'nfs' && (
-                <Select value={String(only)} onValueChange={(v) => setSlice(v === 'all' ? 'all' : Number(v))}>
+              <Select value={String(only)} onValueChange={(v) => setSlice(v === 'all' ? 'all' : Number(v))}>
                 <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="all">Todas as fatias</SelectItem>
-                    {Array.from({ length: run.slice_count }, (_, i) => i + 1).map((id) => (
+                  <SelectItem value="all">Todas as fatias</SelectItem>
+                  {Array.from({ length: run.slice_count }, (_, i) => i + 1).map((id) => (
                     <SelectItem key={id} value={String(id)}>Fatia {id}</SelectItem>
-                    ))}
+                  ))}
                 </SelectContent>
-                </Select>
+              </Select>
             )}
-            </div>
-
+          </div>
+ 
           <TabsContent value="geral" className="space-y-6">
             <div className="grid gap-4 lg:grid-cols-3">
               {[
@@ -345,7 +349,7 @@ export default function PesquisadorMonitoramento() {
                 </Card>
               ))}
             </div>
-
+ 
             <section className="space-y-3">
               <h2 className="text-xs font-medium tracking-wide text-muted-foreground">FATIAS</h2>
               <Card className="px-3 py-2">
@@ -392,21 +396,20 @@ export default function PesquisadorMonitoramento() {
                 </Table>
               </Card>
             </section>
-
+ 
             <ChartGrid tab="geral" data={series} only={only} />
           </TabsContent>
-
+ 
           <TabsContent value="rede"><ChartGrid tab="rede" data={series} only={only} /></TabsContent>
           <TabsContent value="controle"><ChartGrid tab="controle" data={series} only={only} /></TabsContent>
-
+ 
           <TabsContent value="nfs">
             {!nfs ? (
-                <Skeleton className="h-64" />
-                ) : 'reason' in nfs ? (
-                <p className="text-sm text-muted-foreground">NFs indisponíveis: {nfs.reason}.</p>
-                ) : (
-                <Card className="px-3 py-2">
-                    ...
+              <Skeleton className="h-64" />
+            ) : 'reason' in nfs ? (
+              <p className="text-sm text-muted-foreground">NFs indisponíveis: {nfs.reason}.</p>
+            ) : (
+              <Card className="px-3 py-2">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -437,12 +440,14 @@ export default function PesquisadorMonitoramento() {
           </TabsContent>
         </Tabs>
       )}
-
+ 
       <Card>
         <CardHeader>
           <button className="flex items-center gap-2 text-left" onClick={() => setShowLog(!logOpen)}>
             {logOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            <CardTitle className="text-xs tracking-wide text-muted-foreground">LOG DA CRIAÇÃO DO AMBIENTE</CardTitle>
+            <CardTitle className="text-xs tracking-wide text-muted-foreground">
+              {run.status === 'stopping' ? 'LOG DO ENCERRAMENTO DO AMBIENTE' : 'LOG DA CRIAÇÃO DO AMBIENTE'}
+            </CardTitle>
           </button>
         </CardHeader>
         {logOpen && (
@@ -456,3 +461,4 @@ export default function PesquisadorMonitoramento() {
     </div>
   )
 }
+ 
