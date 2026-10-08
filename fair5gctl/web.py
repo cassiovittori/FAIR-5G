@@ -8,6 +8,8 @@ import subprocess
 import sys
 import threading
 import time
+import shlex
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -116,6 +118,40 @@ def _stop(procs: list[subprocess.Popen]) -> None:
         except subprocess.TimeoutExpired:
             os.killpg(p.pid, signal.SIGKILL)
 
+def _http_ok(url: str) -> bool:
+    try:
+        urllib.request.urlopen(url, timeout=1)
+        return True
+    except Exception:
+        return False
+
+
+def _open_when_ready(url: str, health: str, procs: list[subprocess.Popen], timeout: int = 90) -> None:
+    """Espera back e front responderem e abre a URL no navegador local (via $BROWSER do VS Code Remote)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if any(p.poll() is not None for p in procs):
+            return  # algum dos dois caiu; o laço principal já avisa
+        if _http_ok(health) and _http_ok(url):
+            break
+        time.sleep(0.5)
+    else:
+        return  # não ficou pronto a tempo; não abre nada
+
+    browser = os.environ.get("BROWSER")
+    web = _c("[web]", GREEN, bold=True)
+    if not browser:
+        print(f"{web} abra no navegador: {url}")
+        return
+    try:
+        subprocess.Popen(
+            shlex.split(browser) + [url],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print(f"{web} abrindo {url} no navegador...")
+    except OSError:
+        print(f"{web} abra no navegador: {url}")
+
 
 def run_web_interface(host: str = "127.0.0.1") -> None:
     venv_python = _ensure_backend_deps()
@@ -157,6 +193,16 @@ def run_web_interface(host: str = "127.0.0.1") -> None:
     print(f"{web} {_c('backend ', BLUE, bold=True)} → http://localhost:{_c(str(BACKEND_PORT), YELLOW, bold=True)}")
     print(f"{web} {_c('frontend', MAGENTA, bold=True)} → http://localhost:{_c(str(FRONTEND_PORT), YELLOW, bold=True)}")
     print(f"{web} Ctrl+C para encerrar.")
+
+    threading.Thread(
+        target=_open_when_ready,
+        args=(
+            f"http://localhost:{FRONTEND_PORT}",
+            f"http://127.0.0.1:{BACKEND_PORT}/health",
+            procs,
+        ),
+        daemon=True,
+    ).start()
 
     try:
         while all(p.poll() is None for p in procs):
