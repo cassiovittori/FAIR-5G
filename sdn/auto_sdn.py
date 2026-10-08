@@ -456,10 +456,22 @@ def get_container_bridge_ip(container_name: str) -> str:
         f"docker inspect -f '{{{{.NetworkSettings.Networks.bridge.IPAddress}}}}' {container_name}",
         check=False,
     )
-    return result.stdout.strip()
+    ip = result.stdout.strip()
+    # A container that is not on the "bridge" network (UEs run with
+    # network_mode="none") makes docker inspect print "<no value>" and exit 0.
+    # Only an actual IPv4 address counts.
+    return ip if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", ip) else ""
 
 
 def install_mgmt_isolation_rules(specs, bridge_ips: dict):
+    # UEs are now created without a docker0 interface, so normally there is
+    # nothing for these rules to match. Kept, not deleted: the mechanism is part
+    # of the isolation ablation, and a UE that still has a docker0 address
+    # means the network_mode change did not take effect.
+    if not any(bridge_ips.values()):
+        print("Management-plane rules (M3) not needed: no UE has a docker0 address.")
+        return
+    print("[WARN] some UEs still have a docker0 address — expected none.")
     # Chave por NOME de UE: com multiplos UEs por fatia, cada container tem seu
     # proprio IP na bridge docker0 e precisa da regra correspondente.
     for spec in specs:
@@ -542,13 +554,35 @@ def _cleanup_mgmt_for(ip, destinos):
         )
 
 
+# ONOS gets a Docker network of its own. On the default bridge (docker0) it
+# shared a segment with every container that has a docker0 interface, and an
+# emulated UE reached its REST API — the same API, with the same default
+# credentials, that installs the isolation flows and the QoS meters.
+ONOS_NETWORK = "fair5g-ctrl"
+
+
 def ensure_onos():
     name = "onos-controller"
     image = os.getenv("FAIR5G_ONOS_IMAGE", "onosproject/onos:2.7.0")
     user = os.getenv("FAIR5G_ONOS_USER", "onos")
     password = os.getenv("FAIR5G_ONOS_PASS", "rocks")
 
+    if run(f"docker network inspect {ONOS_NETWORK}", check=False).returncode != 0:
+        run(f"docker network create {ONOS_NETWORK}")
+
     cid = run(f"docker ps -aq -f name=^{name}$", check=False).stdout.strip()
+    if cid:
+        # A container left over from an older run (or kept with
+        # FAIR5G_KEEP_ONOS=1) may still be on docker0 with ports published on
+        # every interface. Reusing it would silently undo the isolation.
+        nets = run(
+            f"docker inspect -f '{{{{range $k, $v := .NetworkSettings.Networks}}}}{{{{$k}}}} {{{{end}}}}' {name}",
+            check=False,
+        ).stdout.split()
+        if nets != [ONOS_NETWORK]:
+            print(f"ONOS container is on {nets or 'no network'}, not {ONOS_NETWORK}. Recreating...")
+            run(f"docker rm -f {name}", check=False)
+            cid = ""
     if cid:
         running = run(f"docker inspect -f '{{{{.State.Running}}}}' {name}", check=False).stdout.strip() == "true"
         if not running:
@@ -558,14 +592,33 @@ def ensure_onos():
             print("ONOS já está rodando. OK.")
     else:
         print("Iniciando container ONOS (novo)...")
+        # Ports published on loopback only: OVS, auto_sdn.py, verify_up.py and
+        # the experiment scripts all reach ONOS through localhost. Binding to
+        # 0.0.0.0 exposed the controller to anything that could route to the
+        # host, and does not buy the testbed anything.
         run(
-            "docker run -d --name onos-controller "
-            "-p 8181:8181 -p 8101:8101 -p 6653:6653 -p 6633:6633 "
+            f"docker run -d --name onos-controller --network {ONOS_NETWORK} "
+            "-p 127.0.0.1:8181:8181 -p 127.0.0.1:8101:8101 "
+            "-p 127.0.0.1:6653:6653 -p 127.0.0.1:6633:6633 "
             f"{image}"
         )
 
     if not wait_for_onos(user, password):
         raise RuntimeError("ONOS não respondeu via API")
+
+
+def _flush_fair5g_docker_user():
+    # Removes every DOCKER-USER rule tagged FAIR5G, whatever its match: the rule
+    # changed shape (it used to accept everything), and a delete by exact spec
+    # would leave the old form behind on hosts that ran an earlier version.
+    out = run("iptables -S DOCKER-USER", check=False).stdout
+    for line in out.splitlines():
+        tokens = line.split()
+        if not tokens or tokens[0] != "-A":
+            continue
+        if any(tokens[i] == "--comment" and tokens[i + 1] == "FAIR5G"
+               for i in range(len(tokens) - 1)):
+            run("iptables -D " + " ".join(tokens[1:]), check=False)
 
 
 def ensure_veth_and_iptables(bridge_name: str):
@@ -575,11 +628,13 @@ def ensure_veth_and_iptables(bridge_name: str):
     run("ip link set veth-sdn up")
     run("ip link set veth-docker up")
 
-    run(
-        "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
-        check=False,
-    )
-    run("iptables -I DOCKER-USER 1 -m comment --comment FAIR5G -j ACCEPT", check=False)
+    # Accept only what stays on the access bridge (UE <-> gNB / probe through
+    # veth-docker). The old rule accepted ALL forwarded traffic ahead of
+    # Docker's own isolation; UEs were kept off the core only because Docker
+    # 28+ adds raw-table drops, which older versions do not have.
+    _flush_fair5g_docker_user()
+    run(f"iptables -I DOCKER-USER 1 -i {bridge_name} -o {bridge_name} "
+        "-m comment --comment FAIR5G -j ACCEPT", check=False)
 
     specs = get_slice_specs()
     for spec in specs:
@@ -625,10 +680,7 @@ def configure_ue(container_suffix: str, cfg_file: str):
 
 def cleanup_host_artifacts():
     run("ip link delete veth-sdn 2>/dev/null || true", check=False)
-    run(
-        "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
-        check=False,
-    )
+    _flush_fair5g_docker_user()
     specs = get_slice_specs()
     for spec in specs:
         for other in other_subnets(specs, spec.index):
@@ -678,6 +730,12 @@ def run_topology():
         for spec in specs:
             for ue in spec.ues:
                 info(f"*** Adicionando {ue.name.upper()} (fatia {spec.index})\n")
+                # network_mode="none": the UE's only interfaces are the Mininet
+                # access link and, once the PDU session is up, uesimtun0. With
+                # Docker's default network the UE also got a docker0 interface
+                # and a default route through it, which reached the internet
+                # without crossing the 5G core and reached the SDN controller.
+                # A real UE has no such path, so the emulation must not either.
                 ues[ue.name] = net.addDocker(
                     ue.name,
                     ip=f"{ue.access_ip}/24",
@@ -685,6 +743,7 @@ def run_topology():
                     privileged=True,
                     volumes=[f"{config_dir}:/UERANSIM/config:ro"],
                     dcmd="sleep infinity",
+                    network_mode="none",
                 )
 
         info("*** Conectando Componentes\n")

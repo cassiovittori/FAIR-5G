@@ -41,6 +41,7 @@ fi
 if [[ "${FAIR5G_KEEP_ONOS:-0}" != "1" ]]; then
   echo "[v0] Removendo ONOS (onos-controller)..."
   sudo docker rm -f onos-controller 2>/dev/null || true
+  sudo docker network rm fair5g-ctrl 2>/dev/null || true
 else
   echo "[v0] Mantendo ONOS (FAIR5G_KEEP_ONOS=1)."
 fi
