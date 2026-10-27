@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import { CleanupDialog } from '@/components/CleanupDialog'
 
 const MODES = [
   { key: 'pesquisador', labelKey: 'common.modes.researcher', path: '/pesquisador' },
@@ -44,6 +45,8 @@ export default function AppShell() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <CleanupDialog />
 
         <Button variant="ghost" size="icon"><Search className="h-4 w-4" /></Button>
         <Button variant="ghost" size="icon"><HelpCircle className="h-4 w-4" /></Button>

@@ -154,6 +154,47 @@ def bootstrap(
     return {"status": "started"}
 
 
+# "disjuntor": down sem depender do que o banco acha que está no ar (restos de uma
+# subida que falhou, containers de um up pela CLI...). Log próprio, fora de runs/.
+CLEANUP_LOG = os.path.join(REPO_ROOT, "logs", "cleanup.log")
+
+
+def _cleanup_in_progress() -> bool:
+    if not os.path.exists(CLEANUP_LOG) or _read_finish(CLEANUP_LOG) is not None:
+        return False
+    # log sem "Script done" há mais que o timeout do down = processo morreu (reboot etc.)
+    return time.time() - os.path.getmtime(CLEANUP_LOG) < DOWN_TIMEOUT
+
+
+@app.post("/cleanup")
+def force_cleanup(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    busy = get_busy_run(session)
+    if busy is not None and busy.status in ("starting", "stopping"):
+        estados = {"starting": "sendo criado", "stopping": "sendo encerrado"}
+        raise HTTPException(status_code=409, detail=f"Há um ambiente {estados[busy.status]}. Aguarde terminar.")
+    if _cleanup_in_progress():
+        raise HTTPException(status_code=409, detail="Já existe uma limpeza em andamento.")
+
+    if busy is not None:  # running: derruba pelo caminho normal, o run termina como "stopped"
+        down_log = _start_down(busy.run_id)
+        update_run(session, busy.run_id, status="stopping")
+        _spawn(wait_for_down_completion, busy.run_id, down_log)
+        return {"log": f"/logs/{busy.run_id}/down"}
+
+    # log antigo pode ser do root (o script roda com sudo)
+    subprocess.run(["sudo", "-n", "rm", "-f", CLEANUP_LOG])
+    _run_down_script(CLEANUP_LOG)
+    return {"log": "/logs/cleanup"}
+
+
+@app.get("/logs/cleanup")  # antes de /logs/{run_id}, senão "cleanup" vira run_id
+async def stream_cleanup_logs(current_user: User = Depends(get_current_user)):
+    return StreamingResponse(tail_log(CLEANUP_LOG), media_type="text/event-stream")
+
+
 @app.get("/logs/bootstrap")
 async def stream_bootstrap_logs(current_user: User = Depends(get_current_user)):
     log_path = os.path.join(REPO_ROOT, "logs", "bootstrap.log")
@@ -193,6 +234,10 @@ def _up_was_refused(log_path: str) -> bool:
 def _start_down(run_id: str, wipe: bool = False, keep_onos: bool = False) -> str:
     """Dispara o fair5gctl down em background, logando em runs/<id>/down.log."""
     down_log_path = os.path.join(REPO_ROOT, "runs", run_id, "down.log")
+    return _run_down_script(down_log_path, wipe, keep_onos)
+
+
+def _run_down_script(down_log_path: str, wipe: bool = False, keep_onos: bool = False) -> str:
     os.makedirs(os.path.dirname(down_log_path), exist_ok=True)
 
     down_cmd = "python3 fair5gctl.py down"
@@ -249,6 +294,9 @@ def start_testbed(
     if busy is not None:
         estados = {"starting": "sendo criado", "running": "ativo", "stopping": "sendo encerrado"}
         raise HTTPException(status_code=409, detail=f"já existe um ambiente {estados[busy.status]}")
+    if _cleanup_in_progress():
+        # 423 e não 409: o front trata 409 como "ambiente em uso" e oferece "Parar"
+        raise HTTPException(status_code=423, detail="Há uma limpeza em andamento. Aguarde terminar.")
 
     try:
         ues_per_slice = _validate_ues_per_slice(body.ues_per_slice, body.slices)

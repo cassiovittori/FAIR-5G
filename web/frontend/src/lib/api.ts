@@ -194,6 +194,19 @@ export async function hostMetrics(): Promise<HostMetrics> {
   return res.json()
 }
 
+// "disjuntor": roda o down mesmo sem ambiente registrado. Devolve o caminho do stream de log.
+export async function forceCleanup(): Promise<{ log: string }> {
+  const res = await fetch(`${API_URL}/cleanup`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getToken()}` },
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(detailMessage(data) ?? i18n.t("common.httpError", { status: res.status }), res.status)
+  }
+  return res.json()
+}
+
 export async function stopEnvironment(): Promise<{ run_id: string; status: string }> {
   const res = await fetch(`${API_URL}/down`, {
     method: "POST",
