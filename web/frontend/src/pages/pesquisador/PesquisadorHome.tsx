@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,8 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { listRuns, hostMetrics, stopEnvironment, type Run, type HostMetrics } from '@/lib/api'
 import { StatusDot } from '@/components/StatusDot'
 import { environmentLabel } from '@/lib/runs'
+import i18n from '@/i18n'
 
 export default function PesquisadorHome() {
+  const { t } = useTranslation()
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [metrics, setMetrics] = useState<HostMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -24,7 +27,7 @@ export default function PesquisadorHome() {
       setRuns(runsData)
       setMetrics(metricsData)
     } catch {
-      setError('Não foi possível carregar os dados do Pesquisador agora.')
+      setError(i18n.t('home.loadError'))
     } finally {
       setLoading(false)
     }
@@ -69,7 +72,7 @@ export default function PesquisadorHome() {
       await stopEnvironment()
       await load()
     } catch(err) {
-      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      setError(err instanceof Error ? err.message : t('common.stopError'))
       await load()
     } finally {
       setStopping(false)
@@ -80,12 +83,10 @@ export default function PesquisadorHome() {
     <div className="space-y-8 p-6">
       <Card className="flex justify-between overflow-hidden p-8">
         <div className="max-w-xl space-y-2">
-          <p className="text-sm text-muted-foreground">Olá, Usuário</p>
-          <h1 className="text-2xl font-semibold">Bem vindo ao <span className="font-mono">FAIR-5G</span></h1>
+          <p className="text-sm text-muted-foreground">{t('home.greeting')}</p>
+          <h1 className="text-2xl font-semibold"><Trans i18nKey="home.welcome" components={{ brand: <span className="font-mono" /> }} /></h1>
           <p className="text-sm text-muted-foreground">
-            O FAIR-5G é uma plataforma de pesquisa voltada para criação e gerenciamento de ambientes
-            de rede 5G. Configure novos ambientes de teste em poucos passos, acompanhe o status do
-            sistema em tempo real e conte com um guia integrado.
+            {t('home.intro')}
           </p>
         </div>
       </Card>
@@ -93,15 +94,15 @@ export default function PesquisadorHome() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <section className="space-y-3">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground">AMBIENTES RECENTES</h2>
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground">{t('home.recent')}</h2>
         <Card className="pt-2 px-3 pb-0 gap-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>RUN_ID</TableHead>
-                <TableHead>NOME</TableHead>
-                <TableHead>STATUS</TableHead>
-                <TableHead className="text-right">AÇÕES</TableHead>
+                <TableHead>{t('common.columns.runId')}</TableHead>
+                <TableHead>{t('common.columns.name')}</TableHead>
+                <TableHead>{t('common.columns.status')}</TableHead>
+                <TableHead className="text-right">{t('common.columns.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -117,7 +118,7 @@ export default function PesquisadorHome() {
               ) : recent.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    Nenhum ambiente criado ainda.
+                    {t('home.noneYet')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -129,17 +130,17 @@ export default function PesquisadorHome() {
                     <TableCell className="space-x-3 text-right text-sm">
                       {run.status === 'running' ? (
                         <>
-                          <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Monitorar</Link>
-                          <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">Parar</button>
+                          <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">{t('common.monitor')}</Link>
+                          <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">{t('common.stop')}</button>
                         </>
                       ) : run.status === 'starting' ? (
-                        <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Acompanhar</Link>
+                        <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">{t('common.follow')}</Link>
                       ) : run.status === 'stopping' ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <>
-                          <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">Ver</Link>
-                          <Link to={`/pesquisador/novo?from=${run.run_id}`} className="text-muted-foreground hover:underline">Duplicar</Link>
+                          <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">{t('common.view')}</Link>
+                          <Link to={`/pesquisador/novo?from=${run.run_id}`} className="text-muted-foreground hover:underline">{t('common.duplicate')}</Link>
                         </>
                       )}
                     </TableCell>
@@ -149,8 +150,8 @@ export default function PesquisadorHome() {
             </TableBody>
           </Table>
           <div className="flex items-center justify-between border-t p-4">
-            <Button asChild><Link to="/pesquisador/novo">Criar ambiente</Link></Button>
-            <Link to="/pesquisador/ambientes" className="text-sm text-muted-foreground hover:underline">Ver todos ›</Link>
+            <Button asChild><Link to="/pesquisador/novo">{t('common.createEnvironment')}</Link></Button>
+            <Link to="/pesquisador/ambientes" className="text-sm text-muted-foreground hover:underline">{t('home.viewAll')}</Link>
           </div>
         </Card>
       </section>
@@ -158,7 +159,7 @@ export default function PesquisadorHome() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle className="text-xs tracking-wide text-muted-foreground">AMBIENTE ATIVO</CardTitle>
+            <CardTitle className="text-xs tracking-wide text-muted-foreground">{t('home.activeEnvironment')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {loading ? (
@@ -174,10 +175,10 @@ export default function PesquisadorHome() {
                 </div>
                 <div className="flex gap-2">
                   <Button asChild className="flex-1">
-                    <Link to="/pesquisador/monitoramento">Monitorar</Link>
+                    <Link to="/pesquisador/monitoramento">{t('common.monitor')}</Link>
                   </Button>
                   <Button variant="outline" className="flex-1 hover:!border-destructive hover:!bg-destructive hover:!text-destructive-foreground" onClick={handleStop} disabled={stopping}>
-                    {stopping ? 'Parando...' : 'Parar'}
+                    {stopping ? t('common.stopping') : t('common.stop')}
                   </Button>
                 </div>
               </>
@@ -189,13 +190,13 @@ export default function PesquisadorHome() {
                 </div>
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Aguardando o ambiente ficar ativo...
+                  {t('home.waitingActive')}
                 </p>
                 <div className="flex gap-2">
                   <Button asChild className="flex-1">
-                    <Link to="/pesquisador/monitoramento">Acompanhar</Link>
+                    <Link to="/pesquisador/monitoramento">{t('common.follow')}</Link>
                   </Button>
-                  <Button variant="outline" className="flex-1" disabled>Parar</Button>
+                  <Button variant="outline" className="flex-1" disabled>{t('common.stop')}</Button>
                 </div>
               </>
             ) : stoppingRuns.length > 0 ? (
@@ -206,28 +207,28 @@ export default function PesquisadorHome() {
                 </div>
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Encerrando o ambiente...
+                  {t('common.stoppingEnvironment')}
                 </p>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Nenhum ambiente ativo no momento.</p>
+              <p className="text-sm text-muted-foreground">{t('common.noActiveEnvironment')}</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-xs tracking-wide text-muted-foreground">STATUS GERAL DO SISTEMA</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-xs tracking-wide text-muted-foreground">{t('home.systemStatus')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
-              <div className="flex justify-between text-sm"><span>CPU do host</span><span>{metrics ? `${Math.round(metrics.cpu_percent)}%` : '—'}</span></div>
+              <div className="flex justify-between text-sm"><span>{t('home.hostCpu')}</span><span>{metrics ? `${Math.round(metrics.cpu_percent)}%` : '—'}</span></div>
               <Progress value={metrics?.cpu_percent ?? 0} />
             </div>
             <div className="space-y-1">
-              <div className="flex justify-between text-sm"><span>Memória</span><span>{metrics ? `${Math.round(metrics.memory_percent)}%` : '—'}</span></div>
+              <div className="flex justify-between text-sm"><span>{t('home.memory')}</span><span>{metrics ? `${Math.round(metrics.memory_percent)}%` : '—'}</span></div>
               <Progress value={metrics?.memory_percent ?? 0} />
             </div>
             <div className="flex justify-between text-sm">
-              <span>Últimos alertas</span>
+              <span>{t('home.latestAlerts')}</span>
               <span className="text-[#0633FF]">-</span>
             </div>
           </CardContent>
@@ -235,9 +236,9 @@ export default function PesquisadorHome() {
 
         <Card className="flex flex-col items-center justify-center gap-2 p-6 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm">?</div>
-          <CardTitle className="text-sm">Primeiros passos</CardTitle>
-          <CardDescription className="text-xs">Precisa de ajuda? Acesse o guia e veja como configurar seu primeiro ambiente.</CardDescription>
-          <Link to="/pesquisador/guia" className="text-xs text-muted-foreground hover:underline">Guia ›</Link>
+          <CardTitle className="text-sm">{t('home.gettingStarted')}</CardTitle>
+          <CardDescription className="text-xs">{t('home.gettingStartedDescription')}</CardDescription>
+          <Link to="/pesquisador/guia" className="text-xs text-muted-foreground hover:underline">{t('home.guideLink')}</Link>
         </Card>
       </div>
     </div>

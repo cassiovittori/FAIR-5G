@@ -5,6 +5,7 @@ import { AuthProvider } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/theme'
 import { BootstrapProvider } from './lib/bootstrap-context.tsx'
 import './index.css'
+import '@/i18n'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

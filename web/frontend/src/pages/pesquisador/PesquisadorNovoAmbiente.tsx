@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError, getRun, startEnvironment, stopEnvironment, type UpConfig } from '@/lib/api'
 import { CAMPOS } from '@/lib/up-fields'
+import i18n from '@/i18n'
 
 export default function PesquisadorNovo() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const from = searchParams.get('from')
@@ -38,9 +41,9 @@ export default function PesquisadorNovo() {
           return next
         })
         setCopiedFrom(run.run_id)
-        if (run.nome) setNome(`${run.nome} (cópia)`)
+        if (run.nome) setNome(i18n.t('novo.copyName', { name: run.nome }))
       })
-      .catch(() => setError('Não foi possível carregar a configuração do ambiente original.'))
+      .catch(() => setError(i18n.t('novo.loadSourceError')))
   }, [from])
 
   function buildConfig(): UpConfig | null {
@@ -48,7 +51,7 @@ export default function PesquisadorNovo() {
     for (const c of CAMPOS) {
       const n = Number(values[c.nome])
       if (!Number.isInteger(n) || n < c.min || n > c.max) {
-        setError(`${c.label}: informe um número inteiro entre ${c.min} e ${c.max}.`)
+        setError(t('novo.invalidField', { field: t(c.labelKey), min: c.min, max: c.max }))
         return null
       }
       config[c.nome] = n
@@ -72,7 +75,7 @@ export default function PesquisadorNovo() {
       if (err instanceof ApiError && err.status === 409) {
         setConflict(true)
       } else {
-        setError(err instanceof Error ? err.message : 'Falha ao criar o ambiente.')
+        setError(err instanceof Error ? err.message : t('novo.createError'))
       }
     } finally {
       setSubmitting(false)
@@ -84,9 +87,9 @@ export default function PesquisadorNovo() {
     try {
       await stopEnvironment()
       setConflict(false)
-      setError('Ambiente sendo encerrado. Aguarde terminar e tente criar novamente.')
+      setError(t('novo.stoppingNotice'))
     } catch(err) {
-      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      setError(err instanceof Error ? err.message : t('common.stopError'))
     } finally {
       setStopping(false)
     }
@@ -95,13 +98,13 @@ export default function PesquisadorNovo() {
   return (
     <div className="mx-auto max-w-xl space-y-6 p-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Criar ambiente</h1>
+        <h1 className="text-2xl font-semibold">{t('common.createEnvironment')}</h1>
         <p className="text-sm text-muted-foreground">
-          Defina a configuração do testbed. Só um ambiente pode ficar ativo por vez.
+          {t('novo.subtitle')}
         </p>
         {copiedFrom && (
           <p className="text-xs text-muted-foreground">
-            Configuração copiada de <span className="font-mono">{copiedFrom}</span>. Ajuste o que quiser antes de criar.
+            <Trans i18nKey="novo.copiedFrom" values={{ runId: copiedFrom }} components={{ mono: <span className="font-mono" /> }} />
           </p>
         )}
       </div>
@@ -109,17 +112,17 @@ export default function PesquisadorNovo() {
       {conflict && (
         <Card className="border-[#F5A623]">
           <CardHeader>
-            <CardTitle className="text-sm">Já existe um ambiente em uso</CardTitle>
+            <CardTitle className="text-sm">{t('novo.conflictTitle')}</CardTitle>
             <CardDescription>
-              Aguarde ele terminar de subir ou encerrar, ou pare o ambiente atual.
+              {t('novo.conflictDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex gap-2">
             <Button asChild variant="outline" className="flex-1">
-              <Link to="/pesquisador/monitoramento">Ver ambiente</Link>
+              <Link to="/pesquisador/monitoramento">{t('novo.viewEnvironment')}</Link>
             </Button>
             <Button variant="outline" className="flex-1" onClick={handleStop} disabled={stopping}>
-              {stopping ? 'Parando...' : 'Parar'}
+              {stopping ? t('common.stopping') : t('common.stop')}
             </Button>
           </CardContent>
         </Card>
@@ -129,21 +132,21 @@ export default function PesquisadorNovo() {
         <Card>
           <CardContent className="space-y-6 pt-6">
             <div className="space-y-2">
-                <Label htmlFor="nome">Nome (opcional)</Label>
+                <Label htmlFor="nome">{t('novo.nameLabel')}</Label>
                 <Input
                     id="nome"
                     maxLength={60}
-                    placeholder="Ex.: teste de latência com 4 fatias"
+                    placeholder={t('novo.namePlaceholder')}
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                    Sem nome: "Ambiente — N fatias".
+                    {t('novo.nameHint')}
                 </p>
             </div>
             {CAMPOS.map((c) => (
               <div key={c.nome} className="space-y-2">
-                <Label htmlFor={c.nome}>{c.label}</Label>
+                <Label htmlFor={c.nome}>{t(c.labelKey)}</Label>
                 <Input
                   id={c.nome}
                   type="number"
@@ -153,7 +156,7 @@ export default function PesquisadorNovo() {
                   onChange={(e) => setValues((v) => ({ ...v, [c.nome]: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {c.descricao} De {c.min} a {c.max}, padrão {c.padrao}.
+                  {t(c.descricaoKey)} {t('novo.fieldRange', { min: c.min, max: c.max, default: c.padrao })}
                 </p>
               </div>
             ))}
@@ -162,10 +165,10 @@ export default function PesquisadorNovo() {
 
             <div className="flex justify-end gap-2">
               <Button asChild variant="ghost">
-                <Link to="/pesquisador">Cancelar</Link>
+                <Link to="/pesquisador">{t('common.cancel')}</Link>
               </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting ? 'Criando...' : 'Criar ambiente'}
+                {submitting ? t('novo.creating') : t('common.createEnvironment')}
               </Button>
             </div>
           </CardContent>

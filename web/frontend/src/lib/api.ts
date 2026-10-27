@@ -1,3 +1,5 @@
+import i18n from "@/i18n"
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 
 const TOKEN_KEY = "fair5g_token"
@@ -28,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail ?? `Erro ${res.status}`)
+    throw new Error(detail?.detail ?? i18n.t("common.httpError", { status: res.status }))
   }
 
   return res.json()
@@ -55,7 +57,7 @@ export async function login(email: string, password: string) {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail ?? "Falha no login")
+    throw new Error(detail?.detail ?? i18n.t("auth.loginFailed"))
   }
 
   const data = await res.json()
@@ -192,7 +194,7 @@ export async function stopEnvironment(): Promise<{ run_id: string; status: strin
   })
   if (!res.ok) {
     const data = await res.json().catch(() => null)
-    throw new ApiError(typeof data?.detail === "string" ? data.detail : "Falha ao parar o ambiente.", res.status)
+    throw new ApiError(typeof data?.detail === "string" ? data.detail : i18n.t("common.stopError"), res.status)
   }
   return res.json()
 }
@@ -218,7 +220,7 @@ export async function startEnvironment(config: UpConfig, nome?: string): Promise
   })
   if (!res.ok) {
     const data = await res.json().catch(() => null)
-    const msg = typeof data?.detail === "string" ? data.detail : `Erro ${res.status}`
+    const msg = typeof data?.detail === "string" ? data.detail : i18n.t("common.httpError", { status: res.status })
     throw new ApiError(msg, res.status)
   }
   return res.json()

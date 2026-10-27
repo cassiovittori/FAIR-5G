@@ -1,7 +1,9 @@
+import type { ParseKeys } from 'i18next'
+
 export interface Campo {
   nome: string
-  label: string
-  descricao: string
+  labelKey: ParseKeys
+  descricaoKey: ParseKeys
   min: number
   max: number
   padrao: number
@@ -11,8 +13,8 @@ export interface Campo {
 export const CAMPOS: Campo[] = [
   {
     nome: 'slices',
-    label: 'Quantidade de fatias',
-    descricao: 'Cada fatia de rede é provisionada com seu próprio UE.',
+    labelKey: 'upFields.slices.label',
+    descricaoKey: 'upFields.slices.description',
     min: 1,
     max: 8,
     padrao: 2,

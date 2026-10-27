@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { environmentLabel, fmtDateTime, fmtDuration, stripAnsi } from '@/lib/run
 const MAX_LOG_LINES = 500
 
 export default function PesquisadorAmbienteDetalhe() {
+  const { t } = useTranslation()
   const { runId } = useParams()
   const [run, setRun] = useState<Run | null>(null)
   const [loading, setLoading] = useState(true)
@@ -71,28 +73,32 @@ export default function PesquisadorAmbienteDetalhe() {
     return (
       <div className="space-y-4 p-6">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/pesquisador/ambientes"><ArrowLeft className="mr-1 h-4 w-4" />Voltar</Link>
+          <Link to="/pesquisador/ambientes"><ArrowLeft className="mr-1 h-4 w-4" />{t('common.back')}</Link>
         </Button>
-        <p className="text-sm text-muted-foreground">Ambiente não encontrado.</p>
+        <p className="text-sm text-muted-foreground">{t('detalhe.notFound')}</p>
       </div>
     )
   }
 
   // runs antigos não têm config salvo: cai no slice_count
   const config = run.config ?? { slices: run.slice_count }
+  const fieldLabel = (key: string) => {
+    const campo = CAMPOS.find((c) => c.nome === key)
+    return campo ? t(campo.labelKey) : key
+  }
   const busy = run.status === 'starting' || run.status === 'running' || run.status === 'stopping'
 
   const info = [
-    { label: 'CRIADO EM', value: fmtDateTime(run.created_at) },
-    { label: 'INICIADO EM', value: fmtDateTime(run.started_at) },
-    { label: 'ENCERRADO EM', value: fmtDateTime(run.stopped_at) },
-    { label: 'DURAÇÃO', value: fmtDuration(run) },
+    { label: t('common.columns.createdAt'), value: fmtDateTime(run.created_at) },
+    { label: t('detalhe.startedAt'), value: fmtDateTime(run.started_at) },
+    { label: t('detalhe.stoppedAt'), value: fmtDateTime(run.stopped_at) },
+    { label: t('common.columns.duration'), value: fmtDuration(run) },
   ]
 
   return (
     <div className="space-y-6 p-6">
       <Button asChild variant="ghost" size="sm">
-        <Link to="/pesquisador/ambientes"><ArrowLeft className="mr-1 h-4 w-4" />Todos os ambientes</Link>
+        <Link to="/pesquisador/ambientes"><ArrowLeft className="mr-1 h-4 w-4" />{t('detalhe.backToAll')}</Link>
       </Button>
 
       <div className="flex items-start justify-between gap-4">
@@ -106,11 +112,11 @@ export default function PesquisadorAmbienteDetalhe() {
         <div className="flex gap-2">
           {busy && (
             <Button asChild variant="outline">
-              <Link to="/pesquisador/monitoramento">Monitorar</Link>
+              <Link to="/pesquisador/monitoramento">{t('common.monitor')}</Link>
             </Button>
           )}
           <Button asChild>
-            <Link to={`/pesquisador/novo?from=${run.run_id}`}>Duplicar</Link>
+            <Link to={`/pesquisador/novo?from=${run.run_id}`}>{t('common.duplicate')}</Link>
           </Button>
         </div>
       </div>
@@ -125,13 +131,13 @@ export default function PesquisadorAmbienteDetalhe() {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground">CONFIGURAÇÃO USADA</h2>
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground">{t('detalhe.configUsed')}</h2>
         <Card className="divide-y">
           {Object.entries(config)
             .filter(([key, value]) => key !== 'nome' && value != null)
             .map(([key, value]) => (
               <div key={key} className="flex items-center justify-between px-6 py-3 text-sm">
-                <span>{CAMPOS.find((c) => c.nome === key)?.label ?? key}</span>
+                <span>{fieldLabel(key)}</span>
                 <span className="font-mono">{String(value)}</span>
               </div>
             ))}
@@ -140,11 +146,11 @@ export default function PesquisadorAmbienteDetalhe() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xs tracking-wide text-muted-foreground">LOG DA CRIAÇÃO DO AMBIENTE</CardTitle>
+          <CardTitle className="text-xs tracking-wide text-muted-foreground">{t('common.upLog')}</CardTitle>
         </CardHeader>
         <CardContent>
           <pre ref={logRef} className="max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-            {lines.length ? lines.join('\n') : 'Aguardando log...'}
+            {lines.length ? lines.join('\n') : t('common.waitingLog')}
           </pre>
         </CardContent>
       </Card>

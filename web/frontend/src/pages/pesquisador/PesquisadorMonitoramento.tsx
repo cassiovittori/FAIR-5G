@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { useTranslation } from 'react-i18next'
+import type { ParseKeys, TFunction } from 'i18next'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +19,7 @@ import {
   type NetworkMetrics, type NetworkNfs, type Run, type SliceSeries,
 } from '@/lib/api'
 import { environmentLabel } from '@/lib/runs'
+import { currentLocale } from '@/i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
  
 const POLL_MS = 5000
@@ -30,43 +33,45 @@ type Tab = 'geral' | 'rede' | 'controle' | 'nfs'
  
 interface ChartDef {
   tab: Tab
-  title: string
-  unit: string
+  titleKey: ParseKeys
+  unit: string | { key: ParseKeys }
   // nome da métrica no backend (lista permitida do /metrics/network/history)
   // séries por fatia viram "Fatia N"; séries globais usam label/color daqui
-  metrics: { name: string; label?: string; color?: string }[]
+  metrics: { name: string; labelKey?: ParseKeys; color?: string }[]
 }
  
+const PPS = { key: 'monitoramento.units.packetsPerSec' } as const
+
 // gráfico novo = uma linha nova aqui (e a métrica precisa existir no HISTORY do backend)
 const CHARTS: ChartDef[] = [
-  { tab: 'geral', title: 'LATÊNCIA (RTT ICMP)', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
-  { tab: 'geral', title: 'TRÁFEGO NO UPF (ENTRADA)', unit: 'pacotes/s', metrics: [{ name: 'upf_in_pps' }] },
+  { tab: 'geral', titleKey: 'monitoramento.charts.latency', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
+  { tab: 'geral', titleKey: 'monitoramento.charts.upfIn', unit: PPS, metrics: [{ name: 'upf_in_pps' }] },
  
-  { tab: 'rede', title: 'LATÊNCIA (RTT ICMP)', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
-  { tab: 'rede', title: 'JITTER DO RTT', unit: 'ms', metrics: [{ name: 'jitter_ms' }] },
-  { tab: 'rede', title: 'PERDA DE PACOTES', unit: '%', metrics: [{ name: 'packet_loss' }] },
-  { tab: 'rede', title: 'TRÁFEGO NO UPF (ENTRADA)', unit: 'pacotes/s', metrics: [{ name: 'upf_in_pps' }] },
-  { tab: 'rede', title: 'TRÁFEGO NO UPF (SAÍDA)', unit: 'pacotes/s', metrics: [{ name: 'upf_out_pps' }] },
+  { tab: 'rede', titleKey: 'monitoramento.charts.latency', unit: 'ms', metrics: [{ name: 'rtt_ms' }] },
+  { tab: 'rede', titleKey: 'monitoramento.charts.jitter', unit: 'ms', metrics: [{ name: 'jitter_ms' }] },
+  { tab: 'rede', titleKey: 'monitoramento.charts.packetLoss', unit: '%', metrics: [{ name: 'packet_loss' }] },
+  { tab: 'rede', titleKey: 'monitoramento.charts.upfIn', unit: PPS, metrics: [{ name: 'upf_in_pps' }] },
+  { tab: 'rede', titleKey: 'monitoramento.charts.upfOut', unit: PPS, metrics: [{ name: 'upf_out_pps' }] },
  
   {
-    tab: 'controle', title: 'AMF — REGISTRO INICIAL', unit: 'req/s',
+    tab: 'controle', titleKey: 'monitoramento.charts.amfRegistration', unit: 'req/s',
     metrics: [
-      { name: 'amf_reg_req', label: 'Tentativas', color: '#0633FF' },
-      { name: 'amf_reg_succ', label: 'Sucesso', color: '#22C55E' },
+      { name: 'amf_reg_req', labelKey: 'monitoramento.series.attempts', color: '#0633FF' },
+      { name: 'amf_reg_succ', labelKey: 'monitoramento.series.success', color: '#22C55E' },
     ],
   },
   {
-    tab: 'controle', title: 'AMF — AUTENTICAÇÃO', unit: 'req/s',
+    tab: 'controle', titleKey: 'monitoramento.charts.amfAuth', unit: 'req/s',
     metrics: [
-      { name: 'amf_auth_req', label: 'Requisições', color: '#0633FF' },
-      { name: 'amf_auth_reject', label: 'Rejeitadas', color: '#F5A623' },
-      { name: 'amf_auth_fail', label: 'Falhas', color: '#FF3B5C' },
+      { name: 'amf_auth_req', labelKey: 'monitoramento.series.requests', color: '#0633FF' },
+      { name: 'amf_auth_reject', labelKey: 'monitoramento.series.rejected', color: '#F5A623' },
+      { name: 'amf_auth_fail', labelKey: 'monitoramento.series.failures', color: '#FF3B5C' },
     ],
   },
-  { tab: 'controle', title: 'AMF — ASSINANTES REGISTRADOS', unit: 'UEs', metrics: [{ name: 'amf_registered_by_slice' }] },
-  { tab: 'controle', title: 'SMF — SESSÕES PDU ATIVAS', unit: 'sessões', metrics: [{ name: 'sessions' }] },
-  { tab: 'controle', title: 'SMF — QOS FLOWS', unit: 'flows', metrics: [{ name: 'smf_qos_flows' }] },
-  { tab: 'controle', title: 'UPF — QOS FLOWS', unit: 'flows', metrics: [{ name: 'upf_qos_flows' }] },
+  { tab: 'controle', titleKey: 'monitoramento.charts.amfRegistered', unit: 'UEs', metrics: [{ name: 'amf_registered_by_slice' }] },
+  { tab: 'controle', titleKey: 'monitoramento.charts.smfSessions', unit: { key: 'monitoramento.units.sessions' }, metrics: [{ name: 'sessions' }] },
+  { tab: 'controle', titleKey: 'monitoramento.charts.smfQosFlows', unit: 'flows', metrics: [{ name: 'smf_qos_flows' }] },
+  { tab: 'controle', titleKey: 'monitoramento.charts.upfQosFlows', unit: 'flows', metrics: [{ name: 'upf_qos_flows' }] },
 ]
  
 const metricsFor = (tab: Tab) =>
@@ -75,11 +80,11 @@ const metricsFor = (tab: Tab) =>
 const sliceColor = (id: number) => SLICE_COLORS[(id - 1) % SLICE_COLORS.length]
 const fmt = (n: number | null | undefined, digits = 2) => (n == null ? '—' : n.toFixed(digits))
 const fmtTime = (t?: number) =>
-  t == null ? '' : new Date(t * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  t == null ? '' : new Date(t * 1000).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })
  
 interface Line { key: string; label: string; color: string; points: SliceSeries['points'] }
  
-function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: number | 'all'): Line[] {
+function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: number | 'all', t: TFunction): Line[] {
   const lines: Line[] = []
   def.metrics.forEach((m, mi) => {
     for (const s of data[m.name] ?? []) {
@@ -87,7 +92,7 @@ function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: nu
       if (perSlice && only !== 'all' && s.id !== only) continue
       lines.push({
         key: `${m.name}__${s.id}`,
-        label: perSlice ? `Fatia ${s.id}` : (m.label ?? m.name),
+        label: perSlice ? t('common.sliceN', { id: s.id }) : (m.labelKey ? t(m.labelKey) : m.name),
         color: perSlice ? sliceColor(s.id) : (m.color ?? SLICE_COLORS[mi % SLICE_COLORS.length]),
         points: s.points,
       })
@@ -110,7 +115,8 @@ function toRows(lines: Line[]) {
 }
  
 function MetricChart({ def, data, only }: { def: ChartDef; data: Record<string, SliceSeries[]> | null; only: number | 'all' }) {
-  const lines = buildLines(def, data ?? {}, only)
+  const { t } = useTranslation()
+  const lines = buildLines(def, data ?? {}, only, t)
   const rows = toRows(lines)
   const config = Object.fromEntries(lines.map((l) => [l.key, { label: l.label, color: l.color }])) as ChartConfig
  
@@ -118,12 +124,12 @@ function MetricChart({ def, data, only }: { def: ChartDef; data: Record<string, 
     <Card>
       <CardHeader>
         <CardTitle className="text-xs tracking-wide text-muted-foreground">
-          {def.title} <span className="font-normal">({def.unit})</span>
+          {t(def.titleKey)} <span className="font-normal">({typeof def.unit === 'string' ? def.unit : t(def.unit.key)})</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">Coletando dados...</p>
+          <p className="py-16 text-center text-sm text-muted-foreground">{t('monitoramento.collecting')}</p>
         ) : (
           <ChartContainer config={config} className="h-56 w-full">
             <LineChart data={rows} margin={{ left: 4, right: 8 }}>
@@ -155,13 +161,14 @@ function ChartGrid({ tab, data, only }: { tab: Tab; data: Record<string, SliceSe
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {CHARTS.filter((c) => c.tab === tab).map((c) => (
-        <MetricChart key={c.title} def={c} data={data} only={only} />
+        <MetricChart key={c.titleKey} def={c} data={data} only={only} />
       ))}
     </div>
   )
 }
  
 export default function PesquisadorMonitoramento() {
+  const { t } = useTranslation()
   const [run, setRun] = useState<Run | null>(null)
   const [net, setNet] = useState<NetworkMetrics | null>(null)
   const [series, setSeries] = useState<Record<string, SliceSeries[]> | null>(null)
@@ -197,7 +204,7 @@ export default function PesquisadorMonitoramento() {
       }
       setError(null)
     } catch {
-      setError('Não foi possível atualizar os dados agora.')
+      setError(t('monitoramento.refreshError'))
     } finally {
       setLoading(false)
     }
@@ -237,7 +244,7 @@ export default function PesquisadorMonitoramento() {
       await stopEnvironment()
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      setError(err instanceof Error ? err.message : t('common.stopError'))
       await refresh()
     } finally {
       setStopping(false)
@@ -259,11 +266,11 @@ export default function PesquisadorMonitoramento() {
   if (!run) {
     return (
       <div className="space-y-6 p-6">
-        <h1 className="text-2xl font-semibold">Monitoramento</h1>
+        <h1 className="text-2xl font-semibold">{t('monitoramento.title')}</h1>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
-          <p className="text-sm text-muted-foreground">Nenhum ambiente ativo no momento.</p>
-          <Button asChild><Link to="/pesquisador/novo">Criar ambiente</Link></Button>
+          <p className="text-sm text-muted-foreground">{t('common.noActiveEnvironment')}</p>
+          <Button asChild><Link to="/pesquisador/novo">{t('common.createEnvironment')}</Link></Button>
         </Card>
       </div>
     )
@@ -277,13 +284,13 @@ export default function PesquisadorMonitoramento() {
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">Monitoramento</h1>
+          <h1 className="text-2xl font-semibold">{t('monitoramento.title')}</h1>
           <div className="flex items-center gap-3">
             <span className="text-sm">{environmentLabel(run)}</span>
             <span className="font-mono text-xs text-muted-foreground">{run.run_id}</span>
             <StatusDot status={run.status} />
             <span className="text-sm text-muted-foreground">
-              {run.slice_count} fatia{run.slice_count === 1 ? '' : 's'}
+              {t('common.sliceCount', { count: run.slice_count })}
             </span>
           </div>
         </div>
@@ -293,7 +300,7 @@ export default function PesquisadorMonitoramento() {
             className="hover:!border-destructive hover:!bg-destructive hover:!text-destructive-foreground"
             onClick={handleStop} disabled={stopping}
           >
-            {stopping ? 'Parando...' : 'Parar'}
+            {stopping ? t('common.stopping') : t('common.stop')}
           </Button>
         )}
       </div>
@@ -304,32 +311,32 @@ export default function PesquisadorMonitoramento() {
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           {run.status === 'starting'
-            ? 'Aguardando o ambiente ficar ativo. As métricas aparecem quando ele estiver pronto.'
-            : 'Encerrando o ambiente...'}
+            ? t('monitoramento.waitingActive')
+            : t('common.stoppingEnvironment')}
         </p>
       )}
  
       {running && net && 'reason' in net && (
-        <p className="text-sm text-muted-foreground">Métricas de rede indisponíveis: {net.reason}.</p>
+        <p className="text-sm text-muted-foreground">{t('monitoramento.networkUnavailable', { reason: net.reason })}</p>
       )}
  
       {running && net?.available && (
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <TabsList>
-              <TabsTrigger value="geral">Visão geral</TabsTrigger>
-              <TabsTrigger value="rede">Latência e perda</TabsTrigger>
-              <TabsTrigger value="controle">Plano de controle</TabsTrigger>
-              <TabsTrigger value="nfs">Saúde dos NFs</TabsTrigger>
+              <TabsTrigger value="geral">{t('monitoramento.tabs.overview')}</TabsTrigger>
+              <TabsTrigger value="rede">{t('monitoramento.tabs.network')}</TabsTrigger>
+              <TabsTrigger value="controle">{t('monitoramento.tabs.control')}</TabsTrigger>
+              <TabsTrigger value="nfs">{t('monitoramento.tabs.nfs')}</TabsTrigger>
             </TabsList>
  
             {tab !== 'nfs' && (
               <Select value={String(only)} onValueChange={(v) => setSlice(v === 'all' ? 'all' : Number(v))}>
                 <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as fatias</SelectItem>
+                  <SelectItem value="all">{t('monitoramento.allSlices')}</SelectItem>
                   {Array.from({ length: run.slice_count }, (_, i) => i + 1).map((id) => (
-                    <SelectItem key={id} value={String(id)}>Fatia {id}</SelectItem>
+                    <SelectItem key={id} value={String(id)}>{t('common.sliceN', { id })}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -339,9 +346,9 @@ export default function PesquisadorMonitoramento() {
           <TabsContent value="geral" className="space-y-6">
             <div className="grid gap-4 lg:grid-cols-3">
               {[
-                { label: 'UES CONECTADOS', value: fmt(net.global.ues, 0) },
+                { label: t('monitoramento.cards.connectedUes'), value: fmt(net.global.ues, 0) },
                 { label: 'GNBS', value: fmt(net.global.gnbs, 0) },
-                { label: 'FATIAS', value: String(net.slices.length) },
+                { label: t('monitoramento.cards.slices'), value: String(net.slices.length) },
               ].map((c) => (
                 <Card key={c.label}>
                   <CardHeader><CardTitle className="text-xs tracking-wide text-muted-foreground">{c.label}</CardTitle></CardHeader>
@@ -351,17 +358,17 @@ export default function PesquisadorMonitoramento() {
             </div>
  
             <section className="space-y-3">
-              <h2 className="text-xs font-medium tracking-wide text-muted-foreground">FATIAS</h2>
+              <h2 className="text-xs font-medium tracking-wide text-muted-foreground">{t('monitoramento.cards.slices')}</h2>
               <Card className="px-3 py-2">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>FATIA</TableHead>
+                      <TableHead>{t('monitoramento.columns.slice')}</TableHead>
                       <TableHead>PING</TableHead>
                       <TableHead className="text-right">RTT (ms)</TableHead>
-                      <TableHead className="text-right">SESSÕES</TableHead>
-                      <TableHead className="text-right">UPF ENTRADA (pkt/s)</TableHead>
-                      <TableHead className="text-right">UPF SAÍDA (pkt/s)</TableHead>
+                      <TableHead className="text-right">{t('monitoramento.columns.sessions')}</TableHead>
+                      <TableHead className="text-right">{t('monitoramento.columns.upfIn')}</TableHead>
+                      <TableHead className="text-right">{t('monitoramento.columns.upfOut')}</TableHead>
                       <TableHead className="text-right">AMBR ↓ / ↑ (Mbps)</TableHead>
                       <TableHead className="text-right">QOS</TableHead>
                     </TableRow>
@@ -372,7 +379,7 @@ export default function PesquisadorMonitoramento() {
                         <TableCell>
                           <span className="inline-flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sliceColor(s.id) }} />
-                            Fatia {s.id}
+                            {t('common.sliceN', { id: s.id })}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -381,7 +388,7 @@ export default function PesquisadorMonitoramento() {
                               className="h-1.5 w-1.5 rounded-full"
                               style={{ backgroundColor: s.ping_ok == null ? '#64748B' : s.ping_ok ? '#0633FF' : '#FF3B5C' }}
                             />
-                            {s.ping_ok == null ? '—' : s.ping_ok ? 'ok' : 'sem resposta'}
+                            {s.ping_ok == null ? '—' : s.ping_ok ? 'ok' : t('monitoramento.noResponse')}
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">{fmt(s.rtt_ms, 3)}</TableCell>
@@ -407,16 +414,16 @@ export default function PesquisadorMonitoramento() {
             {!nfs ? (
               <Skeleton className="h-64" />
             ) : 'reason' in nfs ? (
-              <p className="text-sm text-muted-foreground">NFs indisponíveis: {nfs.reason}.</p>
+              <p className="text-sm text-muted-foreground">{t('monitoramento.nfsUnavailable', { reason: nfs.reason })}</p>
             ) : (
               <Card className="px-3 py-2">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>NF</TableHead>
-                      <TableHead>INSTÂNCIA</TableHead>
-                      <TableHead>STATUS</TableHead>
-                      <TableHead className="text-right">MEMÓRIA (MB)</TableHead>
+                      <TableHead>{t('monitoramento.columns.instance')}</TableHead>
+                      <TableHead>{t('common.columns.status')}</TableHead>
+                      <TableHead className="text-right">{t('monitoramento.columns.memory')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -446,14 +453,14 @@ export default function PesquisadorMonitoramento() {
           <button className="flex items-center gap-2 text-left" onClick={() => setShowLog(!logOpen)}>
             {logOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             <CardTitle className="text-xs tracking-wide text-muted-foreground">
-              {run.status === 'stopping' ? 'LOG DO ENCERRAMENTO DO AMBIENTE' : 'LOG DA CRIAÇÃO DO AMBIENTE'}
+              {run.status === 'stopping' ? t('monitoramento.downLog') : t('common.upLog')}
             </CardTitle>
           </button>
         </CardHeader>
         {logOpen && (
           <CardContent>
             <pre ref={logRef} className="max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-              {lines.length ? lines.join('\n') : 'Aguardando log...'}
+              {lines.length ? lines.join('\n') : t('common.waitingLog')}
             </pre>
           </CardContent>
         )}

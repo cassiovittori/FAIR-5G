@@ -3,13 +3,17 @@ import { Link, Outlet, useLocation } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronLeft, LayoutGrid, Boxes, Activity, BookOpen } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const AMBIENTES_ITEMS = [
-  { label: "Ambientes Ativos", to: "/pesquisador/ambientes-ativos" },
-  { label: "Todos os Ambientes", to: "/pesquisador/ambientes" },
-]
+  { labelKey: "sidebar.activeEnvironments", to: "/pesquisador/ambientes-ativos" },
+  { labelKey: "sidebar.allEnvironments", to: "/pesquisador/ambientes" },
+] as const
 
 export default function PesquisadorShell() {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
   const { pathname } = useLocation()
 
@@ -24,8 +28,8 @@ export default function PesquisadorShell() {
       : pathname === to
 
   return (
-    <div className="flex min-h-screen">
-      <aside className={`flex flex-col border-r bg-background transition-all ${collapsed ? "w-16" : "w-64"}`}>
+    <div className="flex h-full">
+      <aside className={`flex shrink-0 flex-col border-r bg-background transition-all ${collapsed ? "w-16" : "w-64"}`}>
         <div className="flex items-center justify-between p-4">
           {!collapsed && <span className="font-mono text-sm font-semibold">FAIR-5G</span>}
           <button onClick={() => setCollapsed((c) => !c)} className="text-muted-foreground">
@@ -35,7 +39,7 @@ export default function PesquisadorShell() {
 
         <div className="space-y-2 px-3">
           <Button className="w-full bg-[#0633FF] text-white hover:bg-[#0633FF]/90" asChild>
-            <Link to="/pesquisador/novo">{collapsed ? "+" : "Criar ambiente"}</Link>
+            <Link to="/pesquisador/novo">{collapsed ? "+" : t("sidebar.createEnvironment")}</Link>
           </Button>
           <Button
             variant={inMenu ? "secondary" : "ghost"}
@@ -44,7 +48,7 @@ export default function PesquisadorShell() {
           >
             <Link to="/pesquisador">
               <LayoutGrid className={`h-4 w-4 ${inMenu ? "text-[#0633FF] dark:text-white" : ""}`} />
-              {!collapsed && "Menu"}
+              {!collapsed && t("sidebar.menu")}
             </Link>
           </Button>
         </div>
@@ -52,7 +56,7 @@ export default function PesquisadorShell() {
         {!collapsed && (
           <nav className="mt-6 flex-1 space-y-6 overflow-y-auto px-3">
             <div>
-              <p className="px-2 text-xs font-medium text-muted-foreground">MÓDULOS</p>
+              <p className="px-2 text-xs font-medium text-muted-foreground">{t("sidebar.modules")}</p>
               <div className="mt-2 space-y-1">
                 <Collapsible defaultOpen>
                   <CollapsibleTrigger
@@ -62,7 +66,7 @@ export default function PesquisadorShell() {
                   >
                     <span className="flex items-center gap-2">
                       <Boxes className={`h-4 w-4 ${inAmbientes ? "text-[#0633FF]" : ""}`} />
-                      Ambientes
+                      {t("sidebar.environments")}
                     </span>
                     <ChevronDown className="h-3 w-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
@@ -71,13 +75,20 @@ export default function PesquisadorShell() {
                       <Link
                         key={item.to}
                         to={item.to}
-                        className={`block rounded-md px-2 py-1 text-sm ${
+                        className={`flex items-center gap-2 rounded-md px-2 py-1 text-sm ${
                           isSubActive(item.to)
-                            ? "border-l-2 border-[#0633FF] font-medium text-foreground"
+                            ? "font-medium text-foreground"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {item.label}
+                        {/* sempre renderizada (invisível quando inativa) pro texto não pular ao trocar de aba */}
+                        <span
+                          aria-hidden
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current text-[#0633FF] transition-[opacity,scale] duration-500 ease-out ${
+                            isSubActive(item.to) ? "glow-dot scale-100 opacity-100" : "scale-0 opacity-0"
+                          }`}
+                        />
+                        {t(item.labelKey)}
                       </Link>
                     ))}
                   </CollapsibleContent>
@@ -92,25 +103,31 @@ export default function PesquisadorShell() {
                   }`}
                 >
                   <Activity className={`h-4 w-4 ${inMonitoramento ? "text-[#F5A623]" : ""}`} />
-                  Monitoramento
+                  {t("sidebar.monitoring")}
                 </Link>
               </div>
             </div>
 
             <div>
-              <p className="px-2 text-xs font-medium text-muted-foreground">RECURSOS</p>
+              <p className="px-2 text-xs font-medium text-muted-foreground">{t("sidebar.resources")}</p>
               <div className="mt-2 space-y-1">
                 <Link to="/pesquisador/guia" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
                   <BookOpen className="h-4 w-4" />
-                  Guia
+                  {t("sidebar.guide")}
                 </Link>
               </div>
             </div>
           </nav>
         )}
+
+        {/* recolhida (w-16) não cabe o seletor de idioma: fica só o tema */}
+        <div className={`mt-auto flex items-center border-t p-3 ${collapsed ? "justify-center" : "justify-between"}`}>
+          {!collapsed && <LanguageSwitcher />}
+          <ThemeToggle />
+        </div>
       </aside>
 
-      <div className="flex-1"><Outlet /></div>
+      <div className="min-w-0 flex-1 overflow-y-auto"><Outlet /></div>
     </div>
   )
 }

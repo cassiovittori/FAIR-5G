@@ -129,3 +129,31 @@
     @apply font-sans;
     }
 }
+
+/* bolinha da aba ativa na sidebar: "respira" em vez de piscar.
+   a bolinha fica sempre acesa; só o halo atrás dela varia, e nunca apaga de todo.
+   anima opacity/transform (interpolação contínua) em vez do blur do box-shadow, que anda em degraus */
+@utility glow-dot {
+  position: relative;
+  box-shadow: 0 0 3px 0 color-mix(in srgb, currentColor 45%, transparent);
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, color-mix(in srgb, currentColor 55%, transparent) 0%, transparent 70%);
+    pointer-events: none;
+    opacity: 0.4;
+    animation: glow-breathe 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after { animation: none; }
+  }
+}
+
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.4; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.3); }
+}

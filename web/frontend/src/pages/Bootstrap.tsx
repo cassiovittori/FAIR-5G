@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +10,7 @@ import { useBootstrap } from "@/lib/bootstrap-context"
 type Phase = "idle" | "running" | "done" | "error"
 
 export default function Bootstrap() {
+  const { t } = useTranslation()
   const { status, checking, refresh } = useBootstrap()
   const [phase, setPhase] = useState<Phase>("idle")
   const [logLines, setLogLines] = useState<string[]>([])
@@ -43,7 +45,7 @@ export default function Bootstrap() {
         }
       )
     } catch {
-      setError("Falha ao iniciar o bootstrap.")
+      setError(t("bootstrap.startError"))
       setPhase("error")
     }
   }
@@ -53,20 +55,20 @@ export default function Bootstrap() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Bootstrap do ambiente</h1>
+        <h1 className="text-2xl font-semibold">{t("bootstrap.title")}</h1>
         <p className="text-muted-foreground">
-          Instala as dependências da VM (Docker, Mininet/Containernet) antes de subir um testbed.
+          {t("bootstrap.subtitle")}
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Checklist</CardTitle>
-          <CardDescription>Estado detectado na VM agora</CardDescription>
+          <CardTitle>{t("bootstrap.checklist")}</CardTitle>
+          <CardDescription>{t("bootstrap.checklistDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {checking ? (
-            <p className="text-sm text-muted-foreground">Checando...</p>
+            <p className="text-sm text-muted-foreground">{t("bootstrap.checking")}</p>
           ) : status ? (
             <>
               <ChecklistItem label="Docker" ok={status.checks.docker} />
@@ -74,7 +76,7 @@ export default function Bootstrap() {
               <ChecklistItem label="Containernet/OpenFlow" ok={status.checks.openflow} />
             </>
           ) : (
-            <p className="text-sm text-destructive">Não foi possível checar o status.</p>
+            <p className="text-sm text-destructive">{t("bootstrap.statusError")}</p>
           )}
         </CardContent>
       </Card>
@@ -83,16 +85,16 @@ export default function Bootstrap() {
 
       <div className="flex gap-2">
         <Button onClick={() => handleRun(false)} disabled={phase === "running"}>
-          {alreadyDone ? "Rodar novamente" : "Rodar bootstrap"}
+          {alreadyDone ? t("bootstrap.runAgain") : t("bootstrap.run")}
         </Button>
         {alreadyDone && (
           <Button variant="outline" onClick={() => handleRun(true)} disabled={phase === "running"}>
-            Forçar reinstalação
+            {t("bootstrap.forceReinstall")}
           </Button>
         )}
         {alreadyDone && phase !== "running" && (
           <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-            Ir para o menu
+            {t("bootstrap.goToMenu")}
           </Button>
         )}
       </div>
@@ -117,10 +119,11 @@ export default function Bootstrap() {
 }
 
 function ChecklistItem({ label, ok }: { label: string; ok: boolean }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between text-sm">
       <span>{label}</span>
-      <Badge variant={ok ? "default" : "secondary"}>{ok ? "OK" : "pendente"}</Badge>
+      <Badge variant={ok ? "default" : "secondary"}>{ok ? "OK" : t("bootstrap.pending")}</Badge>
     </div>
   )
 }

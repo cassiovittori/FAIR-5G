@@ -1,33 +1,65 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
+import { useTranslation } from 'react-i18next'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronLeft, ChevronRight, ListFilter, Search } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { StatusDot } from '@/components/StatusDot'
 import { listRuns, stopEnvironment, type Run } from '@/lib/api'
-import { environmentLabel, fmtDateTime, fmtDuration } from '@/lib/runs'
+import {
+  ALL_STATUSES, DEFAULT_FILTERS, MAX_SLICES, environmentLabel, filterRuns, filtersToParams, fmtDateTime, fmtDuration,
+  hasActiveFilters, parseFilters, type RunFilters,
+} from '@/lib/runs'
 
-const PAGE = 20
+const PAGE_SIZES = [10, 20, 50] as const
 const BUSY: Run['status'][] = ['starting', 'running', 'stopping']
+const SLICE_OPTIONS = Array.from({ length: MAX_SLICES }, (_, i) => i + 1)
 
-type Filter = 'all' | 'stopped' | 'error'
+// guarda o tipo do erro (não o texto) para o idioma valer mesmo depois de trocar
+type ErrorState = { kind: 'load' } | { kind: 'stop'; message?: string } | null
 
 export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActive?: boolean }) {
+  const { t } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ErrorState>(null)
   const [stopping, setStopping] = useState(false)
-  const [filter, setFilter] = useState<Filter>('all')
-  const [visible, setVisible] = useState(PAGE)
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
+  const [page, setPage] = useState(1)
+
+  const filters = useMemo(() => parseFilters(searchParams), [searchParams])
+  const filtering = !onlyActive && hasActiveFilters(filters)
+  // a busca fica exposta; o contador do botão só conta o que está dentro do menu
+  const menuFilterCount =
+    (filters.statuses.length ? 1 : 0) + (filters.from || filters.to ? 1 : 0) + (filters.slices != null ? 1 : 0)
+
+  function updateFilters(patch: Partial<RunFilters>) {
+    setSearchParams(filtersToParams({ ...filters, ...patch }), { replace: true })
+    setPage(1)
+  }
+
+  const clearFilters = () => updateFilters({ ...DEFAULT_FILTERS, order: filters.order })
+
+  function toggleStatus(status: Run['status']) {
+    updateFilters({
+      statuses: filters.statuses.includes(status)
+        ? filters.statuses.filter((s) => s !== status)
+        : [...filters.statuses, status],
+    })
+  }
 
   async function load() {
     try {
       setRuns(await listRuns())
       setError(null)
     } catch {
-      setError('Não foi possível carregar os ambientes agora.')
+      setError({ kind: 'load' })
     } finally {
       setLoading(false)
     }
@@ -44,15 +76,13 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
   }, [inTransition])
 
   const shown = useMemo(
-    () =>
-      (runs ?? []).filter((r) => {
-        if (onlyActive) return BUSY.includes(r.status)
-        if (filter === 'stopped') return r.status === 'stopped'
-        if (filter === 'error') return r.status === 'error'
-        return true
-      }),
-    [runs, onlyActive, filter]
+    () => filterRuns(runs ?? [], onlyActive ? { ...DEFAULT_FILTERS, statuses: BUSY } : filters),
+    [runs, onlyActive, filters]
   )
+
+  // a lista pode encolher (polling, filtro): a página atual é limitada ao total, sem effect
+  const pages = Math.max(1, Math.ceil(shown.length / pageSize))
+  const currentPage = Math.min(page, pages)
 
   async function handleStop() {
     setStopping(true)
@@ -60,7 +90,7 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
       await stopEnvironment()
       await load()
     } catch(err) {
-      setError(err instanceof Error ? err.message : 'Falha ao parar o ambiente.')
+      setError({ kind: 'stop', message: err instanceof Error ? err.message : undefined })
       await load()
     } finally {
       setStopping(false)
@@ -71,40 +101,134 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">{onlyActive ? 'Ambientes ativos' : 'Todos os ambientes'}</h1>
+          <h1 className="text-2xl font-semibold">{onlyActive ? t('ambientes.titleActive') : t('ambientes.titleAll')}</h1>
           <p className="text-sm text-muted-foreground">
-            {onlyActive
-              ? 'Ambientes em uso agora. Só um pode existir por vez.'
-              : 'Histórico de tudo que já foi criado. Use "Duplicar" para reaproveitar uma configuração.'}
+            {onlyActive ? t('ambientes.subtitleActive') : t('ambientes.subtitleAll')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {!onlyActive && (
-            <Select value={filter} onValueChange={(v) => { setFilter(v as Filter); setVisible(PAGE) }}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="stopped">Encerrados</SelectItem>
-                <SelectItem value="error">Com erro</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <Button asChild><Link to="/pesquisador/novo">Criar ambiente</Link></Button>
-        </div>
+        <Button asChild><Link to="/pesquisador/novo">{t('ambientes.create')}</Link></Button>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {!onlyActive && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={filters.q}
+                onChange={(e) => updateFilters({ q: e.target.value })}
+                placeholder={t('ambientes.filters.search')}
+                aria-label={t('ambientes.filters.search')}
+                className="pl-8"
+              />
+            </div>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant={menuFilterCount ? 'secondary' : 'outline'} className="gap-2">
+                  <ListFilter className="h-4 w-4" />
+                  {t('ambientes.filters.filter')}
+                  {menuFilterCount > 0 && (
+                    <span className="rounded-full bg-[#0633FF] px-1.5 text-xs text-white">{menuFilterCount}</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-80 space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t('ambientes.filters.status')}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {ALL_STATUSES.map((status) => {
+                      const active = filters.statuses.includes(status)
+                      return (
+                        <Button
+                          key={status}
+                          size="sm"
+                          variant={active ? 'secondary' : 'outline'}
+                          aria-pressed={active}
+                          onClick={() => toggleStatus(status)}
+                        >
+                          {t(`status.${status}`)}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t('ambientes.filters.createdAt')}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1 text-xs text-muted-foreground">
+                      <span>{t('ambientes.filters.from')}</span>
+                      <Input
+                        type="date"
+                        value={filters.from}
+                        max={filters.to || undefined}
+                        onChange={(e) => updateFilters({ from: e.target.value })}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs text-muted-foreground">
+                      <span>{t('ambientes.filters.to')}</span>
+                      <Input
+                        type="date"
+                        value={filters.to}
+                        min={filters.from || undefined}
+                        onChange={(e) => updateFilters({ to: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t('ambientes.filters.slices')}</p>
+                  <Select
+                    value={filters.slices == null ? 'any' : String(filters.slices)}
+                    onValueChange={(v) => updateFilters({ slices: v === 'any' ? null : Number(v) })}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">{t('ambientes.filters.anySlices')}</SelectItem>
+                      {SLICE_OPTIONS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>{t('ambientes.filters.slicesOption', { count: n })}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {filtering && (
+              <Button variant="ghost" onClick={clearFilters}>{t('ambientes.filters.clear')}</Button>
+            )}
+
+            <Button
+              variant="outline"
+              className="ml-auto gap-2"
+              onClick={() => updateFilters({ order: filters.order === 'newest' ? 'oldest' : 'newest' })}
+              title={t('ambientes.filters.toggleOrder')}
+            >
+              {filters.order === 'newest' ? <ArrowDownWideNarrow className="h-4 w-4" /> : <ArrowUpNarrowWide className="h-4 w-4" />}
+              {filters.order === 'newest' ? t('ambientes.filters.newest') : t('ambientes.filters.oldest')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-destructive">
+          {error.kind === 'load' ? t('ambientes.loadError') : error.message ?? t('ambientes.stopError')}
+        </p>
+      )}
 
       <Card className="px-3 py-2">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>RUN_ID</TableHead>
-              <TableHead>NOME</TableHead>
-              <TableHead>STATUS</TableHead>
-              <TableHead>CRIADO EM</TableHead>
-              <TableHead>DURAÇÃO</TableHead>
-              <TableHead className="text-right">AÇÕES</TableHead>
+              <TableHead>{t('ambientes.columns.runId')}</TableHead>
+              <TableHead>{t('ambientes.columns.name')}</TableHead>
+              <TableHead>{t('ambientes.columns.status')}</TableHead>
+              <TableHead>{t('ambientes.columns.createdAt')}</TableHead>
+              <TableHead>{t('ambientes.columns.duration')}</TableHead>
+              <TableHead className="text-right">{t('ambientes.columns.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,11 +246,16 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
             ) : shown.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                  {onlyActive ? 'Nenhum ambiente ativo no momento.' : 'Nenhum ambiente encontrado.'}
+                  {filtering ? (
+                    <div className="space-y-2">
+                      <p>{t('ambientes.empty.noMatch')}</p>
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>{t('ambientes.filters.clear')}</Button>
+                    </div>
+                  ) : onlyActive ? t('ambientes.empty.noneActive') : t('ambientes.empty.none')}
                 </TableCell>
               </TableRow>
             ) : (
-              shown.slice(0, visible).map((run) => (
+              shown.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((run) => (
                 <TableRow key={run.run_id}>
                   <TableCell className="font-mono text-xs">
                     <Link to={`/pesquisador/ambientes/${run.run_id}`} className="hover:underline">{run.run_id}</Link>
@@ -138,17 +267,17 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
                   <TableCell className="space-x-3 text-right text-sm">
                     {run.status === 'running' ? (
                       <>
-                        <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Monitorar</Link>
-                        <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">Parar</button>
+                        <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">{t('ambientes.actions.monitor')}</Link>
+                        <button onClick={handleStop} disabled={stopping} className="text-[#FF3B5C] hover:underline disabled:opacity-50">{t('ambientes.actions.stop')}</button>
                       </>
                     ) : run.status === 'starting' ? (
-                      <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">Acompanhar</Link>
+                      <Link to="/pesquisador/monitoramento" className="text-muted-foreground hover:underline">{t('ambientes.actions.follow')}</Link>
                     ) : run.status === 'stopping' ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       <>
-                        <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">Ver</Link>
-                        <Link to={`/pesquisador/novo?from=${run.run_id}`} className="text-muted-foreground hover:underline">Duplicar</Link>
+                        <Link to={`/pesquisador/ambientes/${run.run_id}`} className="text-muted-foreground hover:underline">{t('ambientes.actions.view')}</Link>
+                        <Link to={`/pesquisador/novo?from=${run.run_id}`} className="text-muted-foreground hover:underline">{t('ambientes.actions.duplicate')}</Link>
                       </>
                     )}
                   </TableCell>
@@ -157,11 +286,43 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
             )}
           </TableBody>
         </Table>
-        {shown.length > visible && (
-          <div className="border-t p-3 text-center">
-            <Button variant="ghost" onClick={() => setVisible((v) => v + PAGE)}>
-              Mostrar mais ({shown.length - visible} restantes)
-            </Button>
+        {!loading && runs && (!onlyActive || pages > 1) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-2 pt-3 pb-1 text-xs text-muted-foreground">
+            {!onlyActive ? (
+              <span>{t('ambientes.count', { count: runs.length, shown: shown.length })}</span>
+            ) : <span />}
+
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2">
+                {t('ambientes.pagination.perPage')}
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
+                  <SelectTrigger size="sm" className="w-18"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZES.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <span className="mr-1">{t('ambientes.pagination.pageOf', { page: currentPage, pages })}</span>
+                <Button
+                  variant="outline" size="icon-sm"
+                  onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1}
+                  aria-label={t('ambientes.pagination.previous')} title={t('ambientes.pagination.previous')}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline" size="icon-sm"
+                  onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pages}
+                  aria-label={t('ambientes.pagination.next')} title={t('ambientes.pagination.next')}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </Card>
