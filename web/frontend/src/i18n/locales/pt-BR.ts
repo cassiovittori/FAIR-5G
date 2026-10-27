@@ -109,6 +109,11 @@ export const ptBR = {
       student: 'Estudante',
     },
   },
+  errors: {
+    bootstrapStatus: 'Falha ao consultar o status do bootstrap.',
+    listRuns: 'Falha ao listar os ambientes.',
+    hostMetrics: 'Falha ao consultar as métricas do host.',
+  },
   topbar: {
     currentMode: 'Você está no modo:',
     changeMode: 'Alterar modo',
@@ -134,7 +139,7 @@ export const ptBR = {
   },
   bootstrap: {
     title: 'Bootstrap do ambiente',
-    subtitle: 'Instala as dependências da VM (Docker, Mininet/Containernet) antes de subir um testbed.',
+    subtitle: 'Instala as dependências da VM (Docker, Mininet/Containernet e a imagem do UE) antes de subir um testbed.',
     checklist: 'Checklist',
     checklistDescription: 'Estado detectado na VM agora',
     checking: 'Checando...',
@@ -145,6 +150,7 @@ export const ptBR = {
     forceReinstall: 'Forçar reinstalação',
     goToMenu: 'Ir para o menu',
     pending: 'pendente',
+    ueImage: 'Imagem do UE (fair5g-ue)',
   },
   placeholders: {
     tutorial: 'Trilha de Módulos',
@@ -184,6 +190,16 @@ export const ptBR = {
     nameHint: 'Sem nome: "Ambiente — N fatias".',
     fieldRange: 'De {{min}} a {{max}}, padrão {{default}}.',
     creating: 'Criando...',
+    ues: {
+      label: 'UEs por fatia',
+      description: 'De 1 a 4 UEs por fatia, padrão 1. É um limite metodológico, não técnico: cada UE ocupa um núcleo de CPU sob carga e, acima disso, a VM satura e as medições passam a refletir disputa por CPU, não o comportamento da fatia.',
+      modeAll: 'Mesma quantidade em todas',
+      modePerSlice: 'Definir por fatia',
+      sliceField: 'UEs da fatia {{id}}',
+      total_one: 'Total: {{count}} UE',
+      total_other: 'Total: {{count}} UEs',
+      softWarning: 'Muitos UEs ao mesmo tempo podem saturar a CPU da VM e distorcer as medições.',
+    },
   },
   detalhe: {
     backToAll: 'Todos os ambientes',
@@ -191,6 +207,10 @@ export const ptBR = {
     startedAt: 'INICIADO EM',
     stoppedAt: 'ENCERRADO EM',
     configUsed: 'CONFIGURAÇÃO USADA',
+    uesPerSlice: 'UEs por fatia',
+    uesAllSame_one: '{{count}} UE por fatia',
+    uesAllSame_other: '{{count}} UEs por fatia',
+    totalUes: 'Total de UEs',
   },
   monitoramento: {
     title: 'Monitoramento',
@@ -202,6 +222,9 @@ export const ptBR = {
     allSlices: 'Todas as fatias',
     downLog: 'LOG DO ENCERRAMENTO DO AMBIENTE',
     noResponse: 'sem resposta',
+    ambrAggregate: 'AMBR AGREGADO ↓ / ↑ (Mbps)',
+    ambrAggregateHint: 'AMBR agregado da fatia: o limite é compartilhado por todos os UEs dela.',
+    ueLabel: 'Fatia {{id}} · UE {{ue}}',
     tabs: {
       overview: 'Visão geral',
       network: 'Latência e perda',
@@ -214,6 +237,7 @@ export const ptBR = {
     },
     columns: {
       slice: 'FATIA',
+      ues: 'UES',
       sessions: 'SESSÕES',
       upfIn: 'UPF ENTRADA (pkt/s)',
       upfOut: 'UPF SAÍDA (pkt/s)',

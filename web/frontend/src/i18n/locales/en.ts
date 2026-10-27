@@ -110,6 +110,11 @@ export const en: typeof ptBR = {
       student: 'Student',
     },
   },
+  errors: {
+    bootstrapStatus: 'Failed to check the bootstrap status.',
+    listRuns: 'Failed to list the environments.',
+    hostMetrics: 'Failed to fetch the host metrics.',
+  },
   topbar: {
     currentMode: 'You are in mode:',
     changeMode: 'Change mode',
@@ -135,7 +140,7 @@ export const en: typeof ptBR = {
   },
   bootstrap: {
     title: 'Environment bootstrap',
-    subtitle: 'Installs the VM dependencies (Docker, Mininet/Containernet) before bringing up a testbed.',
+    subtitle: 'Installs the VM dependencies (Docker, Mininet/Containernet and the UE image) before bringing up a testbed.',
     checklist: 'Checklist',
     checklistDescription: 'State detected on the VM right now',
     checking: 'Checking...',
@@ -146,6 +151,7 @@ export const en: typeof ptBR = {
     forceReinstall: 'Force reinstall',
     goToMenu: 'Go to menu',
     pending: 'pending',
+    ueImage: 'UE image (fair5g-ue)',
   },
   placeholders: {
     tutorial: 'Module Track',
@@ -185,6 +191,16 @@ export const en: typeof ptBR = {
     nameHint: 'No name: "Environment — N slices".',
     fieldRange: 'From {{min}} to {{max}}, default {{default}}.',
     creating: 'Creating...',
+    ues: {
+      label: 'UEs per slice',
+      description: 'From 1 to 4 UEs per slice, default 1. This is a methodological limit, not a technical one: each UE takes a CPU core under load and, beyond that, the VM saturates and the measurements reflect CPU contention instead of slice behavior.',
+      modeAll: 'Same amount in all',
+      modePerSlice: 'Set per slice',
+      sliceField: 'Slice {{id}} UEs',
+      total_one: 'Total: {{count}} UE',
+      total_other: 'Total: {{count}} UEs',
+      softWarning: 'Many UEs at once can saturate the VM CPU and distort the measurements.',
+    },
   },
   detalhe: {
     backToAll: 'All environments',
@@ -192,6 +208,10 @@ export const en: typeof ptBR = {
     startedAt: 'STARTED AT',
     stoppedAt: 'STOPPED AT',
     configUsed: 'CONFIGURATION USED',
+    uesPerSlice: 'UEs per slice',
+    uesAllSame_one: '{{count}} UE per slice',
+    uesAllSame_other: '{{count}} UEs per slice',
+    totalUes: 'Total UEs',
   },
   monitoramento: {
     title: 'Monitoring',
@@ -203,6 +223,9 @@ export const en: typeof ptBR = {
     allSlices: 'All slices',
     downLog: 'ENVIRONMENT STOP LOG',
     noResponse: 'no response',
+    ambrAggregate: 'AGGREGATE AMBR ↓ / ↑ (Mbps)',
+    ambrAggregateHint: 'Aggregate slice AMBR: the limit is shared by all UEs in the slice.',
+    ueLabel: 'Slice {{id}} · UE {{ue}}',
     tabs: {
       overview: 'Overview',
       network: 'Latency and loss',
@@ -215,6 +238,7 @@ export const en: typeof ptBR = {
     },
     columns: {
       slice: 'SLICE',
+      ues: 'UES',
       sessions: 'SESSIONS',
       upfIn: 'UPF IN (pkt/s)',
       upfOut: 'UPF OUT (pkt/s)',

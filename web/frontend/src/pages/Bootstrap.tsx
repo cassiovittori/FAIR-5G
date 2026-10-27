@@ -74,6 +74,7 @@ export default function Bootstrap() {
               <ChecklistItem label="Docker" ok={status.checks.docker} />
               <ChecklistItem label="Mininet (mn)" ok={status.checks.mn} />
               <ChecklistItem label="Containernet/OpenFlow" ok={status.checks.openflow} />
+              <ChecklistItem label={t("bootstrap.ueImage")} ok={status.checks.ue_image} />
             </>
           ) : (
             <p className="text-sm text-destructive">{t("bootstrap.statusError")}</p>

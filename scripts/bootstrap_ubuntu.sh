@@ -106,6 +106,18 @@ else
   log "Playbook $REPO_ROOT/containernet/ansible/install.yml não encontrado. Pulando."
 fi
 
+# --- Imagem do UE ---
+# Os UEs são criados pelo Containernet (sdn/auto_sdn.py), não pelo docker compose,
+# então o `compose up --build` nunca constrói esta imagem. Sem ela o up falha em
+# "No such image". O nome precisa bater com UE_IMAGE do auto_sdn.py (mesma env var).
+UE_IMAGE="${FAIR5G_UE_IMAGE:-fair5g-ue:v3.2.7}"
+if [[ "$FORCE" -eq 0 ]] && sudo docker image inspect "$UE_IMAGE" >/dev/null 2>&1; then
+  log "Imagem do UE ($UE_IMAGE) já existe. Pulando."
+else
+  log "Construindo a imagem do UE ($UE_IMAGE) a partir de images/ue..."
+  sudo docker build -t "$UE_IMAGE" "$REPO_ROOT/images/ue"
+fi
+
 # --- Dependências Python do FAIR-5G (metrics.py + tutorial.py) ---
 log "Instalando dependências Python do FAIR-5G..."
 PIP_PACKAGES="rich pyfiglet requests questionary flask jinja2 pyyaml"

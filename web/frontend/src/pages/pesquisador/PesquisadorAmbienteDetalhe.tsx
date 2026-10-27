@@ -83,9 +83,20 @@ export default function PesquisadorAmbienteDetalhe() {
   // runs antigos não têm config salvo: cai no slice_count
   const config = run.config ?? { slices: run.slice_count }
   const fieldLabel = (key: string) => {
+    if (key === 'ues_per_slice') return t('detalhe.uesPerSlice')
     const campo = CAMPOS.find((c) => c.nome === key)
     return campo ? t(campo.labelKey) : key
   }
+  const fieldValue = (key: string, value: unknown) => {
+    if (!Array.isArray(value)) return String(value)
+    if (key === 'ues_per_slice' && value.length > 0 && value.every((v) => v === value[0])) {
+      return t('detalhe.uesAllSame', { count: Number(value[0]) })
+    }
+    return value.join(', ')
+  }
+  // runs antigos (sem ues_per_slice) subiram com o padrão do upstream: 1 UE por fatia
+  const ues = Array.isArray(config.ues_per_slice) ? config.ues_per_slice.map(Number) : Array<number>(run.slice_count).fill(1)
+  const totalUes = ues.reduce((a, b) => a + b, 0)
   const busy = run.status === 'starting' || run.status === 'running' || run.status === 'stopping'
 
   const info = [
@@ -138,9 +149,13 @@ export default function PesquisadorAmbienteDetalhe() {
             .map(([key, value]) => (
               <div key={key} className="flex items-center justify-between px-6 py-3 text-sm">
                 <span>{fieldLabel(key)}</span>
-                <span className="font-mono">{String(value)}</span>
+                <span className="font-mono">{fieldValue(key, value)}</span>
               </div>
             ))}
+          <div className="flex items-center justify-between px-6 py-3 text-sm">
+            <span>{t('detalhe.totalUes')}</span>
+            <span className="font-mono">{totalUes}</span>
+          </div>
         </Card>
       </section>
 

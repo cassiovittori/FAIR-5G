@@ -59,25 +59,57 @@ def _slice_from_instance(metric):
     return int(m.group(1)) if m else None
 
 
-def collect_network_metrics(slice_count: int) -> dict:
+def _specs(slice_count: int, ues_per_slice=None):
     if REPO_ROOT not in sys.path:
         sys.path.insert(0, REPO_ROOT)
     from fair5gctl.core.slicing import build_slice_specs
 
-    all_specs = build_slice_specs(slice_count)
-    ip_to_slice = {s.ue_mininet_ip: s.index for s in all_specs}
+    return build_slice_specs(slice_count, ues_per_slice)
+
+
+def _ip_to_ue(specs) -> dict:
+    """IP de acesso -> (fatia, ue_index). Sempre a partir do upstream: o nome/IP do UE
+    depende do tamanho da fatia, então nunca montar na mão."""
+    return {ue.access_ip: (spec.index, ue.ue_index) for spec in specs for ue in spec.ues}
+
+
+def collect_network_metrics(slice_count: int, ues_per_slice=None) -> dict:
+    all_specs = _specs(slice_count, ues_per_slice)
+    ip_to_ue = _ip_to_ue(all_specs)
     specs = {s.index: s for s in all_specs}
-    by_ip = lambda m: ip_to_slice.get(m.get("instance"))
+    by_ue = lambda m: ip_to_ue.get(m.get("instance"))
 
     raw = {name: _query(QUERIES[name]) for name in CURRENT}
     sessions = _by_key(raw["sessions"], _slice_from_instance)
-    ping_ok  = _by_key(raw["ping_ok"], by_ip)
-    rtt      = _by_key(raw["rtt_ms"], by_ip)
+    ping_ok  = _by_key(raw["ping_ok"], by_ue)   # (fatia, ue) -> valor
+    rtt      = _by_key(raw["rtt_ms"], by_ue)
     upf_in   = _by_key(raw["upf_in_pps"], _slice_from_instance)
     upf_out  = _by_key(raw["upf_out_pps"], _slice_from_instance)
 
     def first(name):
         return _num(raw[name][0]["value"][1]) if raw[name] else None
+
+    def ues_of(i):
+        return [
+            {
+                "ue": ue.ue_index,
+                "ip": ue.access_ip,
+                "ping_ok": None if ping_ok.get((i, ue.ue_index)) is None else ping_ok[(i, ue.ue_index)] == 1,
+                "rtt_ms": rtt.get((i, ue.ue_index)),
+            }
+            for ue in specs[i].ues
+        ]
+
+    def slice_ping(ues):
+        # agregado: a fatia só está ok se todos os UEs com dado respondem; null se nenhum tem dado
+        known = [u["ping_ok"] for u in ues if u["ping_ok"] is not None]
+        return all(known) if known else None
+
+    def slice_rtt(ues):
+        vals = [u["rtt_ms"] for u in ues if u["rtt_ms"] is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    per_slice_ues = {i: ues_of(i) for i in range(1, slice_count + 1)}
 
     # a lista é guiada pelo slice_count do run, não pelo que o Prometheus devolveu:
     # fatia sem métrica aparece com null em vez de sumir
@@ -85,13 +117,15 @@ def collect_network_metrics(slice_count: int) -> dict:
         {
             "id": i,
             "sessions": sessions.get(i),
-            "ping_ok": None if ping_ok.get(i) is None else ping_ok[i] == 1,
-            "rtt_ms": rtt.get(i),
+            "ping_ok": slice_ping(per_slice_ues[i]),
+            "rtt_ms": slice_rtt(per_slice_ues[i]),
             "upf_in_pps": upf_in.get(i),
             "upf_out_pps": upf_out.get(i),
             "ambr_down_mbps": specs[i].ambr_down_mbps,
             "ambr_up_mbps": specs[i].ambr_up_mbps,
             "qos_index": specs[i].qos_index,
+            "ue_count": len(specs[i].ues),
+            "ues": per_slice_ues[i],
         }
         for i in range(1, slice_count + 1)
     ]
@@ -130,13 +164,10 @@ HISTORY.update({
 HISTORY["amf_registered_by_slice"] = "by_snssai"
 
 
-def collect_network_history(slice_count: int, minutes: int = 15, since: float | None = None, names=None) -> dict:
-    if REPO_ROOT not in sys.path:
-        sys.path.insert(0, REPO_ROOT)
-    from fair5gctl.core.slicing import build_slice_specs
-
-    all_specs = build_slice_specs(slice_count)
-    ip_to_slice = {s.ue_mininet_ip: s.index for s in all_specs}
+def collect_network_history(slice_count: int, ues_per_slice=None, minutes: int = 15,
+                            since: float | None = None, names=None) -> dict:
+    all_specs = _specs(slice_count, ues_per_slice)
+    ip_to_ue = _ip_to_ue(all_specs)
     sd_to_slice = {f"{s.sst}-{s.sd_hex}": s.index for s in all_specs}
     step = max(5, minutes * 60 // 120)  # ~120 pontos por série, no mínimo 5s
 
@@ -147,18 +178,25 @@ def collect_network_history(slice_count: int, minutes: int = 15, since: float | 
         if kind == "global":
             key_fn = lambda m: 0
         elif kind == "by_ip":
-            key_fn = lambda m: ip_to_slice.get(m.get("instance"))
+            key_fn = lambda m: ip_to_ue.get(m.get("instance"))  # (fatia, ue)
         elif kind == "by_snssai":
             key_fn = lambda m: sd_to_slice.get(m.get("snssai"))
         else:
             key_fn = _slice_from_instance
         series = {}
         for r in _query_range(QUERIES[name], minutes, step, since):
-            sid = key_fn(r["metric"])
-            if sid is not None:
-                series[sid] = [{"t": int(t), "v": _num(v)} for t, v in r["values"]]
-        ids = [0] if kind == "global" else range(1, slice_count + 1)
-        out[name] = [{"id": i, "points": series.get(i, [])} for i in ids]
+            key = key_fn(r["metric"])
+            if key is not None:
+                series[key] = [{"t": int(t), "v": _num(v)} for t, v in r["values"]]
+        if kind == "by_ip":
+            # uma série por UE (a chave por fatia sobrescrevia quando 2 UEs caíam na mesma fatia)
+            out[name] = [
+                {"id": spec.index, "ue": ue.ue_index, "points": series.get((spec.index, ue.ue_index), [])}
+                for spec in all_specs for ue in spec.ues
+            ]
+        else:
+            ids = [0] if kind == "global" else range(1, slice_count + 1)
+            out[name] = [{"id": i, "points": series.get(i, [])} for i in ids]
     return {"step": step, "minutes": minutes, "series": out}
 
 

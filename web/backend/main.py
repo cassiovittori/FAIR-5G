@@ -1,5 +1,6 @@
 import subprocess
 import os
+import sys
 import threading
 import asyncio
 import shlex
@@ -21,12 +22,12 @@ from auth import hash_password, verify_password, create_access_token, decode_acc
 from users_store import create_user, get_user_by_email, any_admin_exists
 from db import create_db_and_tables, get_session, engine
 from runs_store import create_run, update_run, get_run, get_active_run, list_runs, get_busy_run
-from network_metrics import collect_network_metrics, collect_network_history, collect_nfs, HISTORY
+from network_metrics import collect_network_metrics, collect_network_history, collect_nfs, HISTORY, REPO_ROOT
 from pydantic import BaseModel, Field
 
 app = FastAPI()
 
-REPO_ROOT = "/home/ubuntu/FAIR-5G"
+# REPO_ROOT vem do network_metrics (calculado a partir do arquivo, não fixo no código)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 ALLOWED_SELF_SIGNUP_ROLES = {"pesquisador", "estudante", "instrutor"}
 
@@ -39,21 +40,19 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
-    with Session(engine) as session:
-        if not any_admin_exists(session):
-            admin_email = os.environ.get("FAIR5G_ADMIN_EMAIL", "admin@admin.com")
-            admin_password = os.environ.get("FAIR5G_ADMIN_PASSWORD", "admin000")
-            create_user(session, email=admin_email, password_hash=hash_password(admin_password), role="admin")
-            print(f"[auth] admin criado: {admin_email}")
-            reconcile_stuck_runs(session)
-
-
 class UpRequest(BaseModel):
     slices: int = Field(2, ge=1, le=8)
     nome: str | None = Field(None, max_length=60)
+    # um valor por fatia (ou um só, repetido); limites validados pelo upstream no /up
+    ues_per_slice: list[int] | None = None
+
+
+def _validate_ues_per_slice(raw, slice_count: int) -> list[int]:
+    """Delega ao upstream (única fonte dos limites). Levanta ValueError se inválido."""
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    from fair5gctl.core.slicing import validate_ues_per_slice
+    return validate_ues_per_slice(raw, slice_count)
 
 
 
@@ -94,11 +93,27 @@ def status():
     )
     return {"output": result.stdout, "errors": result.stderr}
 
+# mesmo nome/env var que sdn/auto_sdn.py e scripts/bootstrap_ubuntu.sh
+UE_IMAGE = os.environ.get("FAIR5G_UE_IMAGE", "fair5g-ue:v3.2.7")
+
+
+def _ue_image_exists() -> bool:
+    if shutil.which("docker") is None:
+        return False
+    try:
+        r = subprocess.run(["sudo", "-n", "docker", "image", "inspect", UE_IMAGE],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    except subprocess.TimeoutExpired:
+        return False
+    return r.returncode == 0
+
+
 def _bootstrap_checks() -> dict:
     return {
         "docker": shutil.which("docker") is not None,
         "mn": shutil.which("mn") is not None,
         "openflow": os.path.isdir(os.path.join(REPO_ROOT, "openflow")),
+        "ue_image": _ue_image_exists(),
     }
 
 
@@ -144,9 +159,11 @@ async def stream_bootstrap_logs(current_user: User = Depends(get_current_user)):
     log_path = os.path.join(REPO_ROOT, "logs", "bootstrap.log")
     return StreamingResponse(tail_log(log_path), media_type="text/event-stream")
 
-def build_up_args(config: UpRequest) -> list[str]:
-    args = ["--slices", str(config.slices)]
+def build_up_args(config: dict) -> list[str]:
+    args = ["--slices", str(config["slices"])]
     # campo novo do upstream = uma linha nova aqui
+    if config.get("ues_per_slice"):  # runs antigos não têm: o upstream usa o padrão
+        args += ["--ues-per-slice", ",".join(map(str, config["ues_per_slice"]))]
     return args
 
 UP_TIMEOUT = 15 * 60  # segundos
@@ -162,6 +179,49 @@ def _read_finish(log_path: str):
         return None
     return 'COMMAND_EXIT_CODE="0"' in content
 
+# o up_v0.sh recusa subir por cima de um ambiente no ar e sai sem tocar em nada
+UP_REFUSED_MARKER = "Nothing was changed."
+
+
+def _up_was_refused(log_path: str) -> bool:
+    if not os.path.exists(log_path):
+        return False
+    with open(log_path, errors="ignore") as f:
+        return UP_REFUSED_MARKER in f.read()
+
+
+def _start_down(run_id: str, wipe: bool = False, keep_onos: bool = False) -> str:
+    """Dispara o fair5gctl down em background, logando em runs/<id>/down.log."""
+    down_log_path = os.path.join(REPO_ROOT, "runs", run_id, "down.log")
+    os.makedirs(os.path.dirname(down_log_path), exist_ok=True)
+
+    down_cmd = "python3 fair5gctl.py down"
+    if wipe:
+        down_cmd += " --wipe"
+    if keep_onos:
+        down_cmd += " --keep-onos"
+
+    script_cmd = f"sudo -n script -q -f {shlex.quote(down_log_path)} -c {shlex.quote(down_cmd)}"
+    subprocess.Popen(script_cmd, cwd=REPO_ROOT, shell=True)
+    return down_log_path
+
+
+def _fail_up(session, run_id: str, log_path: str):
+    """Subida falhou (ou estourou o tempo): o que já subiu (core, ONOS...) fica no ar e
+    bloqueia o próximo up, então derruba sozinho. O run passa por "stopping" (log do down
+    visível no monitoramento) e termina em "error" -- ver wait_for_down_completion.
+    Exceção: se o upstream RECUSOU subir, o ambiente no ar não é deste run (pode ser um
+    up feito pela CLI) e derrubá-lo seria destrutivo."""
+    if _up_was_refused(log_path):
+        update_run(session, run_id, status="error")
+        print(f"[up] {run_id}: recusado pelo upstream (ambiente já no ar); nada a limpar", flush=True)
+        return
+    update_run(session, run_id, status="stopping")
+    down_log = _start_down(run_id)
+    print(f"[up] {run_id}: subida falhou, derrubando o que ficou no ar", flush=True)
+    _spawn(wait_for_down_completion, run_id, down_log)
+
+
 def wait_for_up_completion(run_id: str, log_path: str, timeout: float = UP_TIMEOUT):
     deadline = time.time() + timeout
     ok = None
@@ -173,7 +233,10 @@ def wait_for_up_completion(run_id: str, log_path: str, timeout: float = UP_TIMEO
         time.sleep(2)
 
     with Session(engine) as session:
-        update_run(session, run_id, status="running" if ok else "error")
+        if ok:
+            update_run(session, run_id, status="running")
+        else:
+            _fail_up(session, run_id, log_path)
 
 @app.post("/up")
 def start_testbed(
@@ -187,23 +250,30 @@ def start_testbed(
         estados = {"starting": "sendo criado", "running": "ativo", "stopping": "sendo encerrado"}
         raise HTTPException(status_code=409, detail=f"já existe um ambiente {estados[busy.status]}")
 
+    try:
+        ues_per_slice = _validate_ues_per_slice(body.ues_per_slice, body.slices)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     run_id = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "up.log")
     nome = (body.nome or "").strip() or None
+    # nome já tem coluna própria; o config guarda só o que vira flag do up
+    config = {**body.model_dump(exclude={"nome"}), "ues_per_slice": ues_per_slice}
 
     create_run(
         session,
         run_id=run_id,
         nome=nome,
         slice_count=body.slices,
-        config=body.model_dump(),
+        config=config,
         log_path=log_path,
         user_id=current_user.id,
     )
 
     subprocess.Popen(
         ["sudo", "-n", "FAIR5G_NO_CLI=1", "python3", "fair5gctl.py", "up",
-        "--run-id", run_id, *build_up_args(body)],
+        "--run-id", run_id, *build_up_args(config)],
         cwd=REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -288,7 +358,14 @@ def wait_for_down_completion(run_id: str, log_path: str, timeout: float = DOWN_T
             # down não terminou no prazo: libera o lock e sinaliza o problema
             update_run(session, run_id, status="error")
         else:
-            update_run(session, run_id, status="stopped", stopped_at=datetime.now(timezone.utc))
+            update_run(session, run_id, status=_status_after_down(log_path), stopped_at=datetime.now(timezone.utc))
+
+
+def _status_after_down(down_log: str) -> str:
+    """Down de um ambiente que subiu -> "stopped"; limpeza depois de subida que falhou -> "error".
+    Sai do up.log ao lado, então vale também para a reconciliação no startup."""
+    up_log = os.path.join(os.path.dirname(down_log), "up.log")
+    return "error" if _read_finish(up_log) is False else "stopped"
 
 def _aware(dt):
     if dt is None:
@@ -311,15 +388,17 @@ def reconcile_stuck_runs(session):
         if status == "starting":
             finished = _read_finish(log_path)
             if finished is not None:
-                new = "running" if finished else "error"
-                update_run(session, run_id, status=new)
-                print(f"[reconcile] {run_id}: starting -> {new} (pelo log)", flush=True)
+                if finished:
+                    update_run(session, run_id, status="running")
+                else:
+                    _fail_up(session, run_id, log_path)
+                print(f"[reconcile] {run_id}: starting -> {'running' if finished else 'falhou'} (pelo log)", flush=True)
                 continue
             age = (datetime.now(timezone.utc) - started).total_seconds() if started else UP_TIMEOUT
             remaining = UP_TIMEOUT - age
             if remaining <= 0:
-                update_run(session, run_id, status="error")
-                print(f"[reconcile] {run_id}: starting -> error (passou de {UP_TIMEOUT // 60} min)", flush=True)
+                _fail_up(session, run_id, log_path)
+                print(f"[reconcile] {run_id}: starting -> falhou (passou de {UP_TIMEOUT // 60} min)", flush=True)
             else:
                 _spawn(wait_for_up_completion, run_id, log_path, remaining)
                 print(f"[reconcile] {run_id}: starting, esperando o log terminar ({int(remaining)}s restantes)", flush=True)
@@ -329,8 +408,9 @@ def reconcile_stuck_runs(session):
             if _read_finish(down_log) is not None:
                 # hora real do fim = última escrita do log
                 stopped_at = datetime.fromtimestamp(os.path.getmtime(down_log), timezone.utc)
-                update_run(session, run_id, status="stopped", stopped_at=stopped_at)
-                print(f"[reconcile] {run_id}: stopping -> stopped (pelo log)", flush=True)
+                new = _status_after_down(down_log)
+                update_run(session, run_id, status=new, stopped_at=stopped_at)
+                print(f"[reconcile] {run_id}: stopping -> {new} (pelo log)", flush=True)
             else:
                 _spawn(wait_for_down_completion, run_id, down_log)
                 print(f"[reconcile] {run_id}: stopping, esperando o down.log terminar", flush=True)
@@ -355,17 +435,7 @@ def stop_testbed(
             detail = "Nenhum ambiente ativo para parar."
         raise HTTPException(status_code=409, detail=detail)
 
-    down_log_path = os.path.join(REPO_ROOT, "runs", active.run_id, "down.log")
-    os.makedirs(os.path.dirname(down_log_path), exist_ok=True)
-
-    down_cmd = "python3 fair5gctl.py down"
-    if wipe:
-        down_cmd += " --wipe"
-    if keep_onos:
-        down_cmd += " --keep-onos"
-
-    script_cmd = f"sudo -n script -q -f {shlex.quote(down_log_path)} -c {shlex.quote(down_cmd)}"
-    subprocess.Popen(script_cmd, cwd=REPO_ROOT, shell=True)
+    down_log_path = _start_down(active.run_id, wipe=wipe, keep_onos=keep_onos)
 
     update_run(session, active.run_id, status="stopping")
     background_tasks.add_task(wait_for_down_completion, active.run_id, down_log_path)
@@ -408,6 +478,7 @@ def on_startup():
             admin_password = os.environ.get("FAIR5G_ADMIN_PASSWORD", "admin000")
             create_user(session, email=admin_email, password_hash=hash_password(admin_password), role="admin")
             print(f"[auth] admin criado: {admin_email}")
+        reconcile_stuck_runs(session)  # sempre, não só quando o admin é criado
     psutil.cpu_percent()  # "aquece" o cálculo -- primeira leitura real vem só na próxima chamada
 
 
@@ -418,6 +489,11 @@ def host_metrics(current_user: User = Depends(get_current_user)):
         "memory_percent": psutil.virtual_memory().percent,
     }
 
+def _run_ues(run) -> list[int] | None:
+    """runs antigos não têm o campo -> None (1 UE por fatia)."""
+    return (run.config or {}).get("ues_per_slice")
+
+
 @app.get("/metrics/network")
 def network_metrics(
     current_user: User = Depends(get_current_user),
@@ -427,7 +503,7 @@ def network_metrics(
     if run is None:
         return {"available": False, "reason": "nenhum ambiente ativo"}
     try:
-        return {"available": True, **collect_network_metrics(run.slice_count)}
+        return {"available": True, **collect_network_metrics(run.slice_count, _run_ues(run))}
     except OSError:  # Prometheus fora do ar ou lento (inclui URLError e timeout)
         return {"available": False, "reason": "prometheus indisponível"}
     
@@ -456,7 +532,7 @@ def network_history(
         since = started.timestamp()
 
     try:
-        return {"available": True, **collect_network_history(run.slice_count, minutes, since, names)}
+        return {"available": True, **collect_network_history(run.slice_count, _run_ues(run), minutes, since, names)}
     except OSError:
         return {"available": False, "reason": "prometheus indisponível"}
 

@@ -47,7 +47,9 @@ def get_active_run(session: Session) -> Run | None:
     return session.exec(select(Run).where(Run.status == "running")).first()
 
 
-def list_runs(session: Session, user_id: int) -> list[Run]:
-    return session.exec(
-        select(Run).where(Run.user_id == user_id).order_by(Run.created_at.desc())
-    ).all()
+def list_runs(session: Session, user_id: int | None = None) -> list[Run]:
+    """user_id=None -> runs de todos os usuários (usado pela reconciliação no startup)."""
+    query = select(Run)
+    if user_id is not None:
+        query = query.where(Run.user_id == user_id)
+    return session.exec(query.order_by(Run.created_at.desc())).all()

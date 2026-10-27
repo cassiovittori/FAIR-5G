@@ -16,6 +16,13 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+// o FastAPI manda `detail` como string (HTTPException) ou como lista de erros (422 do pydantic);
+// a lista não é legível para o usuário, então cai na mensagem genérica
+function detailMessage(body: unknown): string | null {
+  const detail = (body as { detail?: unknown } | null)?.detail
+  return typeof detail === "string" ? detail : null
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
 
@@ -30,7 +37,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail ?? i18n.t("common.httpError", { status: res.status }))
+    throw new Error(detailMessage(detail) ?? i18n.t("common.httpError", { status: res.status }))
   }
 
   return res.json()
@@ -57,7 +64,7 @@ export async function login(email: string, password: string) {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail ?? i18n.t("auth.loginFailed"))
+    throw new Error(detailMessage(detail) ?? i18n.t("auth.loginFailed"))
   }
 
   const data = await res.json()
@@ -78,12 +85,12 @@ export async function me(): Promise<User> {
 // Bootstrap ---------------------------------
 export interface BootstrapStatus {
   bootstrapped: boolean
-  checks: { docker: boolean; mn: boolean; openflow: boolean }
+  checks: { docker: boolean; mn: boolean; openflow: boolean; ue_image: boolean }
 }
 
 export async function bootstrapStatus(): Promise<BootstrapStatus> {
   const res = await fetch(`${API_URL}/bootstrap/status`)
-  if (!res.ok) throw new Error("falha ao consultar status do bootstrap")
+  if (!res.ok) throw new Error(i18n.t("errors.bootstrapStatus"))
   return res.json()
 }
 
@@ -92,7 +99,7 @@ export async function runBootstrap(force = false): Promise<{ status: string; mes
     method: "POST",
     headers: { Authorization: `Bearer ${getToken()}` },
   })
-  if (!res.ok) throw new Error("falha ao iniciar bootstrap")
+  if (!res.ok) throw new Error(i18n.t("bootstrap.startError"))
   return res.json()
 }
 
@@ -170,7 +177,7 @@ export async function listRuns(): Promise<Run[]> {
   const res = await fetch(`${API_URL}/runs`, {
     headers: { Authorization: `Bearer ${getToken()}` },
   })
-  if (!res.ok) throw new Error("falha ao listar ambientes")
+  if (!res.ok) throw new Error(i18n.t("errors.listRuns"))
   return res.json()
 }
 
@@ -183,7 +190,7 @@ export async function hostMetrics(): Promise<HostMetrics> {
   const res = await fetch(`${API_URL}/metrics/host`, {
     headers: { Authorization: `Bearer ${getToken()}` },
   })
-  if (!res.ok) throw new Error("falha ao consultar métricas do host")
+  if (!res.ok) throw new Error(i18n.t("errors.hostMetrics"))
   return res.json()
 }
 
@@ -207,7 +214,7 @@ export class ApiError extends Error {
   }
 }
 
-export type UpConfig = Record<string, number>
+export type UpConfig = Record<string, number | number[]>
 
 export async function startEnvironment(config: UpConfig, nome?: string): Promise<{ run_id: string }> {
   const res = await fetch(`${API_URL}/up`, {
@@ -237,6 +244,8 @@ export interface SliceMetrics {
   ambr_down_mbps: number
   ambr_up_mbps: number
   qos_index: number
+  ue_count: number
+  ues: { ue: number; ip: string; ping_ok: boolean | null; rtt_ms: number | null }[]
 }
 
 export type NetworkMetrics =
@@ -246,7 +255,8 @@ export type NetworkMetrics =
 export const networkMetrics = () => api.get<NetworkMetrics>("/metrics/network")
 
 export interface SeriesPoint { t: number; v: number | null }
-export interface SliceSeries { id: number; points: SeriesPoint[] }
+// ue só nas métricas por IP de UE (rtt/perda/jitter); ausente nas demais e no histórico de runs antigos
+export interface SliceSeries { id: number; ue?: number; points: SeriesPoint[] }
 
 export type NetworkHistory =
   | { available: false; reason: string }

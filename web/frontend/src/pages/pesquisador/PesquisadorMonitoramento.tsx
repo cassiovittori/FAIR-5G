@@ -82,18 +82,29 @@ const fmt = (n: number | null | undefined, digits = 2) => (n == null ? '—' : n
 const fmtTime = (t?: number) =>
   t == null ? '' : new Date(t * 1000).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })
  
-interface Line { key: string; label: string; color: string; points: SliceSeries['points'] }
+interface Line { key: string; label: string; color: string; dash?: string; points: SliceSeries['points'] }
+
+// UEs da mesma fatia: mesma cor, traço diferente (UE 1 contínuo)
+const UE_DASHES = [undefined, '6 3', '2 3', '8 3 2 3']
  
 function buildLines(def: ChartDef, data: Record<string, SliceSeries[]>, only: number | 'all', t: TFunction): Line[] {
   const lines: Line[] = []
   def.metrics.forEach((m, mi) => {
-    for (const s of data[m.name] ?? []) {
+    const series = data[m.name] ?? []
+    // métricas por IP de UE trazem uma série por UE; "Fatia N · UE k" só quando a fatia tem mais de um
+    const uesInSlice = new Map<number, number>()
+    for (const s of series) uesInSlice.set(s.id, (uesInSlice.get(s.id) ?? 0) + 1)
+    for (const s of series) {
       const perSlice = s.id !== 0
       if (perSlice && only !== 'all' && s.id !== only) continue
+      const multiUe = s.ue != null && (uesInSlice.get(s.id) ?? 0) > 1
       lines.push({
-        key: `${m.name}__${s.id}`,
-        label: perSlice ? t('common.sliceN', { id: s.id }) : (m.labelKey ? t(m.labelKey) : m.name),
+        key: `${m.name}__${s.id}-${s.ue ?? 0}`,
+        label: !perSlice
+          ? (m.labelKey ? t(m.labelKey) : m.name)
+          : multiUe ? t('monitoramento.ueLabel', { id: s.id, ue: s.ue }) : t('common.sliceN', { id: s.id }),
         color: perSlice ? sliceColor(s.id) : (m.color ?? SLICE_COLORS[mi % SLICE_COLORS.length]),
+        dash: multiUe ? UE_DASHES[((s.ue ?? 1) - 1) % UE_DASHES.length] : undefined,
         points: s.points,
       })
     }
@@ -146,7 +157,7 @@ function MetricChart({ def, data, only }: { def: ChartDef; data: Record<string, 
               {lines.map((l) => (
                 <Line
                   key={l.key} dataKey={l.key} type="monotone"
-                  stroke={l.color} strokeWidth={2} dot={false} isAnimationActive={false}
+                  stroke={l.color} strokeDasharray={l.dash} strokeWidth={2} dot={false} isAnimationActive={false}
                 />
               ))}
             </LineChart>
@@ -364,12 +375,13 @@ export default function PesquisadorMonitoramento() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('monitoramento.columns.slice')}</TableHead>
+                      <TableHead className="text-right">{t('monitoramento.columns.ues')}</TableHead>
                       <TableHead>PING</TableHead>
                       <TableHead className="text-right">RTT (ms)</TableHead>
                       <TableHead className="text-right">{t('monitoramento.columns.sessions')}</TableHead>
                       <TableHead className="text-right">{t('monitoramento.columns.upfIn')}</TableHead>
                       <TableHead className="text-right">{t('monitoramento.columns.upfOut')}</TableHead>
-                      <TableHead className="text-right">AMBR ↓ / ↑ (Mbps)</TableHead>
+                      <TableHead className="text-right" title={t('monitoramento.ambrAggregateHint')}>{t('monitoramento.ambrAggregate')}</TableHead>
                       <TableHead className="text-right">QOS</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -382,6 +394,7 @@ export default function PesquisadorMonitoramento() {
                             {t('common.sliceN', { id: s.id })}
                           </span>
                         </TableCell>
+                        <TableCell className="text-right font-mono text-sm">{s.ue_count ?? '—'}</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center gap-1.5 text-sm">
                             <span
