@@ -8,11 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { listRuns, hostMetrics, stopEnvironment, type Run, type HostMetrics } from '@/lib/api'
 import { StatusDot } from '@/components/StatusDot'
-
-// backend ainda não tem campo "nome" no Run -- usando slice_count até decidirmos se cria um
-function environmentLabel(run: Run) {
-  return `Ambiente — ${run.slice_count} fatia${run.slice_count === 1 ? '' : 's'}`
-}
+import { environmentLabel } from '@/lib/runs'
 
 export default function PesquisadorHome() {
   const [runs, setRuns] = useState<Run[] | null>(null)
