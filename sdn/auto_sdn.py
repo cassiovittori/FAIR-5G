@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import os
+import re
 import time
 import subprocess
 import json
 import sys
 import base64
+import threading
 import urllib.request
 import urllib.error
 
@@ -27,13 +29,19 @@ from fair5gctl.core.slicing import (
 )
 
 
+# UE image: by default the locally derived one, which already ships iperf3 and
+# the other traffic tools. FAIR5G_UE_IMAGE switches back to the official image
+# when those tools are not needed.
+UE_IMAGE = os.getenv("FAIR5G_UE_IMAGE", "fair5g-ue:v3.2.7")
+
 ACCESS_NETWORK = "fair5g-access"
 CORE_NETWORK = "open5gs"
 
 
 def get_slice_specs():
     count = int(os.getenv("FAIR5G_SLICE_COUNT", DEFAULT_SLICE_COUNT))
-    return build_slice_specs(count)
+    ues = os.getenv("FAIR5G_UES_PER_SLICE") or None
+    return build_slice_specs(count, ues)
 
 
 def run(cmd: str, check: bool = True):
@@ -48,7 +56,16 @@ def run(cmd: str, check: bool = True):
     return p
 
 
-def detect_config_dir():
+def detect_config_dir(specs=None):
+    """Descobre o diretorio com as configs de UE.
+
+    A checagem procura o arquivo do PRIMEIRO UE efetivamente provisionado, e nao
+    um nome fixo: com multiplos UEs por fatia os arquivos passam a se chamar
+    ue1_1.yaml, ue1_2.yaml etc., e um teste por "ue1.yaml" falharia mesmo com o
+    diretorio correto.
+    """
+    esperado = specs[0].ues[0].config_file if specs and specs[0].ues else "ue1.yaml"
+
     env = os.getenv("FAIR5G_CONFIG_DIR")
     candidates = []
     if env:
@@ -60,11 +77,11 @@ def detect_config_dir():
     ]
 
     for d in candidates:
-        if os.path.isfile(os.path.join(d, "ue1.yaml")):
+        if os.path.isfile(os.path.join(d, esperado)):
             print(f"Usando CONFIG_DIR: {d}")
             return d
 
-    print("\n[ERRO] Não achei ue1.yaml em nenhum candidato.")
+    print(f"\n[ERRO] Nao achei {esperado} em nenhum candidato.")
     print("Defina FAIR5G_CONFIG_DIR apontando para a pasta correta.")
     print("Candidatos testados:")
     for d in candidates:
@@ -239,17 +256,23 @@ def install_slice_flows(user: str, password: str, dpid: str, specs, ports: dict,
         print("[AVISO] IP do gNB não informado — flows de uplink ficam permissivos "
               "(UE alcança todo o core). Whitelist desativado.")
 
+    # Um conjunto de flows por UE. Todos os UEs de uma fatia referenciam o MESMO
+    # meter: o AMBR e agregado por fatia (semantica de Session-AMBR do 3GPP), nao
+    # por assinante. Assim, UEs da mesma fatia competem entre si pelo limite
+    # dela — cenario intra-slice que interessa ao modelo de ameacas.
     flows = []
     for spec in specs:
         meter_id = meter_ids.get(spec.index)
-        for dst_ip in allowed_dsts:
-            flows.append(allow_flow(spec.ue_mininet_ip, dst_ip, meter_id))
-        for deny_subnet in other_subnets(specs, spec.index):
-            flows.append(isolation_flow(spec.ue_mininet_ip, deny_subnet))
+        for ue in spec.ues:
+            for dst_ip in allowed_dsts:
+                flows.append(allow_flow(ue.access_ip, dst_ip, meter_id))
+            for deny_subnet in other_subnets(specs, spec.index):
+                flows.append(isolation_flow(ue.access_ip, deny_subnet))
     for spec in specs:
         meter_id = meter_ids.get(spec.index)
-        flows.append(uplink_flow(spec.ue_mininet_ip, meter_id))
-        flows.append(downlink_flow(spec.ue_mininet_ip, ports[spec.index], meter_id))
+        for ue in spec.ues:
+            flows.append(uplink_flow(ue.access_ip, meter_id))
+            flows.append(downlink_flow(ue.access_ip, ports[ue.name], meter_id))
 
     print(f"Instalando {len(flows)} flows proativos no switch {dpid}...")
     failed = 0
@@ -279,40 +302,135 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
     rate_by_index = {s.index: meter_rate_kbps(s.ambr_down_mbps) for s in specs}
     burst_by_index = {s.index: max(int(rate_by_index[s.index] * 0.8192), 1) for s in specs}
 
+    # Wait for the previous meters to be removed before creating the new ones:
+    # creating on top of a state that is still dirty makes ONOS reuse ids the
+    # switch still considers taken.
+    for _ in range(20):
+        current = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+        if not current.get("meters"):
+            break
+        time.sleep(0.5)
+
     print(f"Instalando {len(specs)} meters no switch {dpid}...")
+
+    # SERIALIZED creation: each meter is confirmed in ONOS before the next one.
+    #
+    # Firing the POSTs in quick succession creates a race: ONOS allocates the id
+    # without waiting for the previous confirmation, and two meters get the SAME
+    # id. The switch installs the first and rejects the second as a duplicate,
+    # but ONOS records the second as created — leaving it with a view that
+    # diverges from the switch's.
+    #
+    # Observed on 2026-09-23 with 2 slices: OVS showed meter id=1 at 8000 kbps
+    # (slice 1) while ONOS showed meter id=1 at 3000 kbps (slice 2). In practice
+    # slice 1 ran with NO enforcement and slice 2 got a limit that was not its
+    # own — with the log announcing success.
+    seen = set()
     for spec in specs:
+        rate = rate_by_index[spec.index]
         payload = {
             "deviceId": dpid,
             "unit": "KB_PER_SEC",
             "burst": True,
             "bands": [{
                 "type": "DROP",
-                "rate": rate_by_index[spec.index],
+                "rate": rate,
                 "burstSize": burst_by_index[spec.index],
             }],
         }
         result = _onos_request("POST", f"/onos/v1/meters/{dpid}", user, password, payload=payload)
         if result is None:
-            print(f"[AVISO] POST meter da fatia {spec.index} falhou.")
+            print(f"[WARN] POST of the meter for slice {spec.index} failed.")
+            continue
 
-    time.sleep(2)
+        # Confirm THIS meter showed up before creating the next one.
+        confirmed = None
+        for _ in range(20):
+            data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
+            for m in data.get("meters", []):
+                mid = m.get("id")
+                if mid in seen:
+                    continue
+                for band in m.get("bands", []):
+                    if band.get("rate") == rate:
+                        confirmed = mid
+                        break
+                if confirmed:
+                    break
+            if confirmed:
+                break
+            time.sleep(0.5)
+
+        if confirmed is None:
+            print(f"[WARN] the meter for slice {spec.index} ({rate} kbps) was not "
+                  f"confirmed in ONOS after 10s.")
+        else:
+            seen.add(confirmed)
+
     meters_data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
     if not meters_data:
         print("[AVISO] Não foi possível obter IDs dos meters — flows sem QoS enforcement.")
         return {}
 
-    rate_to_id = {}
+    # Mapeia cada fatia ao SEU meter, consumindo cada id uma unica vez.
+    #
+    # A versao anterior montava um dicionario taxa -> id. Como os QOS_PROFILES
+    # se repetem ciclicamente, duas fatias com o mesmo AMBR colapsavam na mesma
+    # chave e passavam a compartilhar um unico meter — ou seja, dividiam um
+    # limite agregado em vez de terem um limite cada, enquanto o log informava
+    # que N meters haviam sido instalados. Observado em 2026-09-09 com 4 fatias:
+    # "Meter fatia 1: id=3" e "Meter fatia 3: id=3", com dois meters orfaos.
+    available = []
     for m in meters_data.get("meters", []):
         for band in m.get("bands", []):
             r = band.get("rate")
             if r in rate_by_index.values():
-                rate_to_id[r] = m.get("id")
+                available.append((m.get("id"), r))
+                break
 
     meter_ids = {}
+    used = set()
     for spec in specs:
-        meter_id = rate_to_id.get(rate_by_index[spec.index])
+        target_rate = rate_by_index[spec.index]
+        meter_id = None
+        for mid, r in available:
+            if r == target_rate and mid not in used:
+                meter_id = mid
+                used.add(mid)
+                break
+        if meter_id is None:
+            print(
+                f"[AVISO] nenhum meter disponivel para a fatia {spec.index} "
+                f"(taxa {target_rate} kbps) — esta fatia ficara SEM enforcement de QoS."
+            )
         meter_ids[spec.index] = meter_id
-        print(f"Meter fatia {spec.index}: id={meter_id} rate={rate_by_index[spec.index]}KB/s")
+        print(f"Meter fatia {spec.index}: id={meter_id} rate={target_rate} kbps")
+
+    distintos = len({v for v in meter_ids.values() if v is not None})
+    if distintos != len(specs):
+        print(
+            f"[AVISO] {distintos} meter(s) distinto(s) para {len(specs)} fatia(s): "
+            f"ha fatias compartilhando limite agregado."
+        )
+
+    # Cross-check ONOS's view against the switch's. The two can diverge (ONOS
+    # records as created a meter the switch rejected), and in that case the real
+    # enforcement is the switch's — what ONOS reports does not count as
+    # evidence.
+    try:
+        dump = run("ovs-ofctl -O OpenFlow13 dump-meters s1", check=False)
+        if dump.stdout:
+            switch_rates = sorted(int(m) for m in re.findall(r"rate=(\d+)", dump.stdout))
+            expected_rates = sorted(rate_by_index.values())
+            if switch_rates != expected_rates:
+                print(f"[WARN] ONOS/switch mismatch — rates on the switch: "
+                      f"{switch_rates} kbps, expected: {expected_rates} kbps. "
+                      f"The effective enforcement is the switch's.")
+            else:
+                print(f"Meters confirmed on the switch: {switch_rates} kbps")
+    except Exception as e:
+        print(f"[WARN] could not check the meters on the switch: {e}")
+
     return meter_ids
 
 
@@ -338,26 +456,45 @@ def get_container_bridge_ip(container_name: str) -> str:
         f"docker inspect -f '{{{{.NetworkSettings.Networks.bridge.IPAddress}}}}' {container_name}",
         check=False,
     )
-    return result.stdout.strip()
+    ip = result.stdout.strip()
+    # A container that is not on the "bridge" network (UEs run with
+    # network_mode="none") makes docker inspect print "<no value>" and exit 0.
+    # Only an actual IPv4 address counts.
+    return ip if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", ip) else ""
 
 
 def install_mgmt_isolation_rules(specs, bridge_ips: dict):
+    # UEs are now created without a docker0 interface, so normally there is
+    # nothing for these rules to match. Kept, not deleted: the mechanism is part
+    # of the isolation ablation, and a UE that still has a docker0 address
+    # means the network_mode change did not take effect.
+    if not any(bridge_ips.values()):
+        print("Management-plane rules (M3) not needed: no UE has a docker0 address.")
+        return
+    print("[WARN] some UEs still have a docker0 address — expected none.")
+    # Chave por NOME de UE: com multiplos UEs por fatia, cada container tem seu
+    # proprio IP na bridge docker0 e precisa da regra correspondente.
     for spec in specs:
-        src = bridge_ips.get(spec.index)
-        if not src:
-            print(f"[AVISO] IP Docker não encontrado para mn.ue{spec.index}, pulando regras.")
-            continue
-        for dst in other_subnets(specs, spec.index):
-            run(
-                f"while iptables-legacy -D FORWARD -s {src} -d {dst} "
-                "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
-                check=False,
-            )
-            run(
-                f"iptables-legacy -I FORWARD 1 -s {src} -d {dst} "
-                "-m comment --comment FAIR5G-SLICE-ISO-MGMT -j DROP"
-            )
+        for ue in spec.ues:
+            src = bridge_ips.get(ue.name)
+            if not src:
+                print(f"[AVISO] IP Docker nao encontrado para {ue.container}, pulando regras.")
+                continue
+            _mgmt_rules_for(src, other_subnets(specs, spec.index))
     print(f"Isolamento mgmt plane: {bridge_ips}")
+
+
+def _mgmt_rules_for(src, destinos):
+    for dst in destinos:
+        run(
+            f"while iptables-legacy -D FORWARD -s {src} -d {dst} "
+            "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
+            check=False,
+        )
+        run(
+            f"iptables-legacy -I FORWARD 1 -s {src} -d {dst} "
+            "-m comment --comment FAIR5G-SLICE-ISO-MGMT -j DROP"
+        )
 
 
 def install_upf_isolation_rules(specs, core_subnet: str = ""):
@@ -401,16 +538,27 @@ def install_upf_isolation_rules(specs, core_subnet: str = ""):
 def cleanup_mgmt_isolation_rules():
     specs = get_slice_specs()
     for spec in specs:
-        cname = f"mn.ue{spec.index}"
-        ip = get_container_bridge_ip(cname)
-        if not ip:
-            continue
-        for deny_subnet in other_subnets(specs, spec.index):
-            run(
-                f"while iptables-legacy -D FORWARD -s {ip} -d {deny_subnet} "
-                "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
-                check=False,
-            )
+        for ue in spec.ues:
+            ip = get_container_bridge_ip(ue.container)
+            if not ip:
+                continue
+            _cleanup_mgmt_for(ip, other_subnets(specs, spec.index))
+
+
+def _cleanup_mgmt_for(ip, destinos):
+    for deny_subnet in destinos:
+        run(
+            f"while iptables-legacy -D FORWARD -s {ip} -d {deny_subnet} "
+            "-m comment --comment FAIR5G-SLICE-ISO-MGMT 2>/dev/null; do :; done",
+            check=False,
+        )
+
+
+# ONOS gets a Docker network of its own. On the default bridge (docker0) it
+# shared a segment with every container that has a docker0 interface, and an
+# emulated UE reached its REST API — the same API, with the same default
+# credentials, that installs the isolation flows and the QoS meters.
+ONOS_NETWORK = "fair5g-ctrl"
 
 
 def ensure_onos():
@@ -419,7 +567,22 @@ def ensure_onos():
     user = os.getenv("FAIR5G_ONOS_USER", "onos")
     password = os.getenv("FAIR5G_ONOS_PASS", "rocks")
 
+    if run(f"docker network inspect {ONOS_NETWORK}", check=False).returncode != 0:
+        run(f"docker network create {ONOS_NETWORK}")
+
     cid = run(f"docker ps -aq -f name=^{name}$", check=False).stdout.strip()
+    if cid:
+        # A container left over from an older run (or kept with
+        # FAIR5G_KEEP_ONOS=1) may still be on docker0 with ports published on
+        # every interface. Reusing it would silently undo the isolation.
+        nets = run(
+            f"docker inspect -f '{{{{range $k, $v := .NetworkSettings.Networks}}}}{{{{$k}}}} {{{{end}}}}' {name}",
+            check=False,
+        ).stdout.split()
+        if nets != [ONOS_NETWORK]:
+            print(f"ONOS container is on {nets or 'no network'}, not {ONOS_NETWORK}. Recreating...")
+            run(f"docker rm -f {name}", check=False)
+            cid = ""
     if cid:
         running = run(f"docker inspect -f '{{{{.State.Running}}}}' {name}", check=False).stdout.strip() == "true"
         if not running:
@@ -429,14 +592,33 @@ def ensure_onos():
             print("ONOS já está rodando. OK.")
     else:
         print("Iniciando container ONOS (novo)...")
+        # Ports published on loopback only: OVS, auto_sdn.py, verify_up.py and
+        # the experiment scripts all reach ONOS through localhost. Binding to
+        # 0.0.0.0 exposed the controller to anything that could route to the
+        # host, and does not buy the testbed anything.
         run(
-            "docker run -d --name onos-controller "
-            "-p 8181:8181 -p 8101:8101 -p 6653:6653 -p 6633:6633 "
+            f"docker run -d --name onos-controller --network {ONOS_NETWORK} "
+            "-p 127.0.0.1:8181:8181 -p 127.0.0.1:8101:8101 "
+            "-p 127.0.0.1:6653:6653 -p 127.0.0.1:6633:6633 "
             f"{image}"
         )
 
     if not wait_for_onos(user, password):
         raise RuntimeError("ONOS não respondeu via API")
+
+
+def _flush_fair5g_docker_user():
+    # Removes every DOCKER-USER rule tagged FAIR5G, whatever its match: the rule
+    # changed shape (it used to accept everything), and a delete by exact spec
+    # would leave the old form behind on hosts that ran an earlier version.
+    out = run("iptables -S DOCKER-USER", check=False).stdout
+    for line in out.splitlines():
+        tokens = line.split()
+        if not tokens or tokens[0] != "-A":
+            continue
+        if any(tokens[i] == "--comment" and tokens[i + 1] == "FAIR5G"
+               for i in range(len(tokens) - 1)):
+            run("iptables -D " + " ".join(tokens[1:]), check=False)
 
 
 def ensure_veth_and_iptables(bridge_name: str):
@@ -446,11 +628,13 @@ def ensure_veth_and_iptables(bridge_name: str):
     run("ip link set veth-sdn up")
     run("ip link set veth-docker up")
 
-    run(
-        "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
-        check=False,
-    )
-    run("iptables -I DOCKER-USER 1 -m comment --comment FAIR5G -j ACCEPT", check=False)
+    # Accept only what stays on the access bridge (UE <-> gNB / probe through
+    # veth-docker). The old rule accepted ALL forwarded traffic ahead of
+    # Docker's own isolation; UEs were kept off the core only because Docker
+    # 28+ adds raw-table drops, which older versions do not have.
+    _flush_fair5g_docker_user()
+    run(f"iptables -I DOCKER-USER 1 -i {bridge_name} -o {bridge_name} "
+        "-m comment --comment FAIR5G -j ACCEPT", check=False)
 
     specs = get_slice_specs()
     for spec in specs:
@@ -496,10 +680,7 @@ def configure_ue(container_suffix: str, cfg_file: str):
 
 def cleanup_host_artifacts():
     run("ip link delete veth-sdn 2>/dev/null || true", check=False)
-    run(
-        "while iptables -D DOCKER-USER -m comment --comment FAIR5G -j ACCEPT 2>/dev/null; do :; done",
-        check=False,
-    )
+    _flush_fair5g_docker_user()
     specs = get_slice_specs()
     for spec in specs:
         for other in other_subnets(specs, spec.index):
@@ -518,7 +699,7 @@ def run_topology():
     specs = get_slice_specs()
     print(f"Provisionando {len(specs)} fatia(s): {[s.index for s in specs]}")
 
-    config_dir = detect_config_dir()
+    config_dir = detect_config_dir(specs)
     preclean_mn_containers()
 
     print("Configurando Controlador ONOS...")
@@ -547,19 +728,28 @@ def run_topology():
 
         ues = {}
         for spec in specs:
-            info(f"*** Adicionando UE{spec.index}\n")
-            ues[spec.index] = net.addDocker(
-                f"ue{spec.index}",
-                ip=f"{spec.ue_mininet_ip}/24",
-                dimage="ghcr.io/borjis131/ue:v3.2.7",
-                privileged=True,
-                volumes=[f"{config_dir}:/UERANSIM/config:ro"],
-                dcmd="sleep infinity",
-            )
+            for ue in spec.ues:
+                info(f"*** Adicionando {ue.name.upper()} (fatia {spec.index})\n")
+                # network_mode="none": the UE's only interfaces are the Mininet
+                # access link and, once the PDU session is up, uesimtun0. With
+                # Docker's default network the UE also got a docker0 interface
+                # and a default route through it, which reached the internet
+                # without crossing the 5G core and reached the SDN controller.
+                # A real UE has no such path, so the emulation must not either.
+                ues[ue.name] = net.addDocker(
+                    ue.name,
+                    ip=f"{ue.access_ip}/24",
+                    dimage=UE_IMAGE,
+                    privileged=True,
+                    volumes=[f"{config_dir}:/UERANSIM/config:ro"],
+                    dcmd="sleep infinity",
+                    network_mode="none",
+                )
 
         info("*** Conectando Componentes\n")
         for spec in specs:
-            net.addLink(ues[spec.index], s1)
+            for ue in spec.ues:
+                net.addLink(ues[ue.name], s1)
 
         Intf("veth-sdn", node=s1)
 
@@ -569,10 +759,18 @@ def run_topology():
         print("Configurando flows de fatiamento no SDN...")
         dpid = wait_for_switch(user, password)
 
-        ports = {spec.index: get_port_by_name(user, password, dpid, f"s1-eth{spec.index}") for spec in specs}
+        # As interfaces do switch seguem a ordem em que os links foram criados
+        # (s1-eth1, s1-eth2, ...), que e a ordem dos UEs em `all_ues`. Com
+        # multiplos UEs por fatia o indice da fatia deixa de servir como chave;
+        # a chave passa a ser o nome do UE.
+        ordem_ues = [ue for spec in specs for ue in spec.ues]
+        ports = {
+            ue.name: get_port_by_name(user, password, dpid, f"s1-eth{posicao}")
+            for posicao, ue in enumerate(ordem_ues, start=1)
+        }
         port_core = get_port_by_name(user, password, dpid, "veth-sdn")
 
-        missing = [f"ue{i}" for i, p in ports.items() if not p]
+        missing = [nome for nome, p in ports.items() if not p]
         if not port_core:
             missing.append("core")
         if missing:
@@ -604,7 +802,8 @@ def run_topology():
         # do UE permanentemente — não removê-las.
 
         print("Configurando isolamento mgmt plane...")
-        bridge_ips = {spec.index: get_container_bridge_ip(f"mn.ue{spec.index}") for spec in specs}
+        bridge_ips = {ue.name: get_container_bridge_ip(ue.container)
+                      for spec in specs for ue in spec.ues}
         install_mgmt_isolation_rules(specs, bridge_ips)
 
         print("Configurando isolamento do plano de dados nas UPFs...")
@@ -612,21 +811,112 @@ def run_topology():
 
         print("Iniciando Conexao 5G (UERANSIM)...")
         for spec in specs:
-            configure_ue(f"ue{spec.index}", f"ue{spec.index}.yaml")
+            for ue in spec.ues:
+                configure_ue(ue.name, ue.config_file)
 
         print("\nAmbiente Pronto (Mininet)")
-        print('Logs: ue1 sh -c "tail -f /tmp/ue1.log"')
+        primeiro = specs[0].ues[0].name
+        print(f'Logs: {primeiro} sh -c "tail -f /tmp/{primeiro}.log"')
         if len(specs) > 1:
-            print(f'Ping básico: ue1 ping -c 3 {specs[1].ue_mininet_ip}')
+            print(f'Ping basico: {primeiro} ping -c 3 {specs[1].ue_mininet_ip}')
         print('Verificar flows: ovs-ofctl dump-flows s1\n')
 
-        if os.getenv("FAIR5G_NO_CLI") == "1":
-            print("Modo não-interativo (API) — ambiente segue rodando em background.")
+        modo_detach = os.environ.get("FAIR5G_DETACH") == "1"
+
+        if modo_detach:
+            # Modo desacoplado: o ambiente deixa de depender de um terminal
+            # interativo aberto.
+            #
+            # No modo padrao o processo termina abrindo a CLI do Containernet, e
+            # e ESSE processo que mantem a topologia viva — sair do prompt
+            # derruba switch, hosts e links. Isso inviabiliza campanha
+            # experimental com repeticoes, porque cada rodada exigiria um humano
+            # com o terminal aberto, e qualquer queda de sessao SSH descarta o
+            # experimento em andamento.
+            #
+            # Aqui o processo apenas aguarda SIGTERM/SIGINT. A limpeza continua
+            # no bloco `finally`, identica ao modo interativo, entao derrubar via
+            # sinal produz exatamente o mesmo estado final que sair da CLI.
+            import signal
+
+            parar = threading.Event()
+
+            def _encerrar(signum, _frame):
+                print(f"\nSinal {signum} recebido — encerrando ambiente...")
+                parar.set()
+
+            signal.signal(signal.SIGTERM, _encerrar)
+            signal.signal(signal.SIGINT, _encerrar)
+
+            pid_file = os.path.join(REPO_ROOT, ".fair5g_topology.pid")
+            try:
+                with open(pid_file, "w") as fh:
+                    fh.write(str(os.getpid()))
+            except Exception as e:
+                print(f"[AVISO] nao foi possivel gravar o arquivo de pid: {e}")
+
+            print(f"Modo desacoplado ativo (pid {os.getpid()}).")
+            print("O ambiente permanece no ar sem terminal interativo.")
+            print(f"Para executar comandos nos UEs:  ./fair5g exec {specs[0].ues[0].name} <comando>")
+            print("Para derrubar:                   ./fair5g down\n")
+            parar.wait()
+
+            try:
+                os.remove(pid_file)
+            except FileNotFoundError:
+                pass
+            except Exception:
+                pass
         else:
-            CLI(net)
+            # Check the environment's post-conditions BEFORE handing over the
+            # terminal.
+            #
+            # Running here, the output comes out in a normal terminal and in
+            # order. While the check was fired by up_v0.sh it wrote in parallel
+            # with the Containernet CLI, which had already put the terminal into
+            # raw mode (cbreak): '\n' stopped returning to column 0 and the
+            # lines came out in a staircase, interleaved with the prompt.
+            #
+            # A failed post-condition warns but does not tear the topology down.
+            # Whether the data is usable is the operator's call, so the exit
+            # status is deliberately ignored.
+            checker = os.path.join(REPO_ROOT, "scripts", "verify_up.py")
+            if os.path.isfile(checker):
+                # subprocess.run directly, not the run() helper: that one uses
+                # capture_output=True and would swallow the report.
+                subprocess.run(f"python3 {checker}", shell=True)
+
+            roteiro = os.getenv("FAIR5G_CLI_SCRIPT") or ""
+            if os.getenv("FAIR5G_NO_CLI") == "1":
+                print("Modo não-interativo (API) — ambiente segue rodando em background.")
+            elif roteiro and os.path.isfile(roteiro):
+                # Modo roteirizado: alimenta a CLI do Containernet com um arquivo
+                # de comandos em vez de esperar digitacao.
+                #
+                # E o que viabiliza campanha experimental sem depender de um
+                # terminal humano: o roteiro executa a bateria de medicoes e
+                # termina com `exit`, encerrando a topologia pelo mesmo caminho do
+                # modo interativo — mesma limpeza, mesmo estado final.
+                #
+                # A CLI aceita tanto comandos em hosts (`ue1_1 iperf3 ...`) quanto
+                # comandos no hospedeiro via `sh` (`sh sudo docker exec ...`), de
+                # modo que uma repeticao inteira cabe em um unico arquivo.
+                print(f"Executando roteiro: {roteiro}")
+                # Usa o parametro `script` da CLI, que le o arquivo e retorna ao
+                # final. Alimentar via stdin nao funcionaria: a CLI registra a
+                # entrada padrao em um poller, que exige descritor de arquivo real.
+                CLI(net, script=roteiro)
+                print("Roteiro concluido; encerrando a topologia.")
+            else:
+                if roteiro:
+                    print(f"[AVISO] roteiro nao encontrado: {roteiro}. Abrindo CLI interativa.")
+                CLI(net)
 
     finally:
-        if os.getenv("FAIR5G_NO_CLI") != "1":
+        manter_no_ar = (
+            os.getenv("FAIR5G_NO_CLI") == "1" and os.environ.get("FAIR5G_DETACH") != "1"
+        )
+        if not manter_no_ar:
             print("Limpando ambiente...")
             try:
                 if net is not None:

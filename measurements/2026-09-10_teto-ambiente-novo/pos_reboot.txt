@@ -1,0 +1,9 @@
+qui 10 set 2026 19:20:35 -03
+               total        used        free      shared  buff/cache   available
+Mem:           7,7Gi       2,7Gi       2,6Gi        47Mi       2,3Gi       4,6Gi
+Swap:          2,0Gi          0B       2,0Gi
+CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O         PIDS
+f5fb3a66df80   onos-controller   6.40%     989.3MiB / 7.709GiB   12.53%    91.4kB / 46.3kB   172MB / 121MB     319
+68f9416feba8   gnb               0.67%     12.36MiB / 7.709GiB   0.16%     24kB / 9.9kB      9.15MB / 4.1kB    12
+21c309b68197   upf1              0.15%     25.77MiB / 7.709GiB   0.33%     17.4kB / 24.6kB   160kB / 16.4kB    3
+59a8e8be05f2   mn.ue1            0.94%     11.3MiB / 7.709GiB    0.14%     2.96kB / 126B     9.13MB / 16.4kB   14

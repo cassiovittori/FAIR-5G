@@ -1,0 +1,84 @@
+2026-10-07T21:50:53-03:00
+Docker 29.7.2
+== host
+LISTEN 0      4096       127.0.0.1:8181       0.0.0.0:*    users:(("docker-proxy",pid=140742,fd=8)) 
+LISTEN 0      4096       127.0.0.1:6653       0.0.0.0:*    users:(("docker-proxy",pid=140709,fd=8)) 
+-N DOCKER-USER
+-A DOCKER-USER -i br-access -o br-access -m comment --comment FAIR5G -j ACCEPT
+            is_connected: true
+  ONOS via localhost: 200
+ONOS=172.18.0.2 DB=10.33.33.3 NRF=10.33.33.7 AMF=10.33.33.12 | tunnel: ue1_1=10.45.0.2 ue1_2=10.45.0.3 ue2=10.46.0.2
+== mn.ue1_1
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+uesimtun0        UNKNOWN        10.45.0.2/16 fe80::a30d:6dd5:4c36:4856/64 
+ue1_1-eth0@if1200 UP             10.34.0.200/24 fe80::9084:26ff:fe6c:b09f/64 
+10.34.0.0/24 dev ue1_1-eth0 proto kernel scope link src 10.34.0.200 
+10.45.0.0/16 dev uesimtun0 proto kernel scope link src 10.45.0.2 
+ [normal state]
+  ping 10.34.0.3 -> RESPONDE
+  ping 8.8.8.8 -I uesimtun0 -> RESPONDE
+  ping 8.8.8.8 -> SEM_RESPOSTA
+  ping 10.34.0.202 -> SEM_RESPOSTA
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+ [default route forced through the tunnel]
+  tcp 8.8.8.8:53 -> ABERTO
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+  tcp 10.33.33.3:27017 -> FECHADO
+  tcp 10.33.33.7:7777 -> FECHADO
+  tcp 10.33.33.12:7777 -> FECHADO
+  ping 10.46.0.2 -> SEM_RESPOSTA
+  ping 10.46.0.1 -> SEM_RESPOSTA
+== mn.ue1_2
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+uesimtun0        UNKNOWN        10.45.0.3/16 fe80::da1:4e1a:dbae:ba2a/64 
+ue1_2-eth0@if1202 UP             10.34.0.201/24 fe80::dc70:e1ff:fe64:a354/64 
+10.34.0.0/24 dev ue1_2-eth0 proto kernel scope link src 10.34.0.201 
+10.45.0.0/16 dev uesimtun0 proto kernel scope link src 10.45.0.3 
+ [normal state]
+  ping 10.34.0.3 -> RESPONDE
+  ping 8.8.8.8 -I uesimtun0 -> RESPONDE
+  ping 8.8.8.8 -> SEM_RESPOSTA
+  ping 10.34.0.202 -> SEM_RESPOSTA
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+ [default route forced through the tunnel]
+  tcp 8.8.8.8:53 -> ABERTO
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+  tcp 10.33.33.3:27017 -> FECHADO
+  tcp 10.33.33.7:7777 -> FECHADO
+  tcp 10.33.33.12:7777 -> FECHADO
+  ping 10.46.0.2 -> SEM_RESPOSTA
+  ping 10.46.0.1 -> SEM_RESPOSTA
+== mn.ue2
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+uesimtun0        UNKNOWN        10.46.0.2/16 fe80::5195:8671:9468:a10f/64 
+ue2-eth0@if1204  UP             10.34.0.202/24 fe80::7cf7:8ff:fe20:efc3/64 
+10.34.0.0/24 dev ue2-eth0 proto kernel scope link src 10.34.0.202 
+10.46.0.0/16 dev uesimtun0 proto kernel scope link src 10.46.0.2 
+ [normal state]
+  ping 10.34.0.3 -> RESPONDE
+  ping 8.8.8.8 -I uesimtun0 -> RESPONDE
+  ping 8.8.8.8 -> SEM_RESPOSTA
+  ping 10.34.0.200 -> SEM_RESPOSTA
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+ [default route forced through the tunnel]
+  tcp 8.8.8.8:53 -> ABERTO
+  tcp 172.17.0.2:8181 -> FECHADO
+  tcp 172.18.0.2:8181 -> FECHADO
+  tcp 10.33.33.1:8181 -> FECHADO
+  tcp 10.33.33.3:27017 -> FECHADO
+  tcp 10.33.33.7:7777 -> FECHADO
+  tcp 10.33.33.12:7777 -> FECHADO
+  ping 10.45.0.2 -> SEM_RESPOSTA
+  ping 10.45.0.1 -> SEM_RESPOSTA
+== intra-slice ue1_1 -> ue1_2 via tunnel (allowed on 2026-10-07; policy pending)
+  ping 10.45.0.3 -I uesimtun0 -> RESPONDE

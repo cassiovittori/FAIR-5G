@@ -1,0 +1,99 @@
+*** Starting CLI:
+containernet> ue1 ip -br addr show uesimtun0
+uesimtun0        UNKNOWN        10.45.0.2/16 fe80::fa9a:57f8:37e8:6efd/64 
+containernet> ue1 iperf3 -c 10.45.0.1 -B 10.45.0.2 -t 15
+bash: iperf3: command not found
+containernet> ue1 iperf3 -c 10.45.0.1 -B 10.45.0.2 -t 15ue1 iperf3 -c 10.45.0.1 -B 10.45.0.2 -t 15
+Connecting to host 10.45.0.1, port 5201
+[  5] local 10.45.0.2 port 46379 connected to 10.45.0.1 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec  3.30 MBytes  27.7 Mbits/sec  370   7.90 KBytes       
+[  5]   1.00-2.00   sec  1011 KBytes  8.28 Mbits/sec  165   23.7 KBytes       
+[  5]   2.00-3.00   sec  1.97 MBytes  16.6 Mbits/sec  201   1.32 KBytes       
+[  5]   3.00-4.00   sec  1011 KBytes  8.28 Mbits/sec  120   5.27 KBytes       
+[  5]   4.00-5.00   sec  1.48 MBytes  12.4 Mbits/sec  172   6.58 KBytes       
+[  5]   5.00-6.00   sec  1.48 MBytes  12.4 Mbits/sec  144   13.2 KBytes       
+[  5]   6.00-7.00   sec  1011 KBytes  8.28 Mbits/sec  137   6.58 KBytes       
+[  5]   7.00-8.00   sec  1.48 MBytes  12.4 Mbits/sec  152   5.27 KBytes       
+[  5]   8.00-9.00   sec  1011 KBytes  8.28 Mbits/sec  127   35.5 KBytes       
+[  5]   9.00-10.00  sec  1.48 MBytes  12.4 Mbits/sec  153   31.6 KBytes       
+[  5]  10.00-11.00  sec  1.48 MBytes  12.4 Mbits/sec  144   14.5 KBytes       
+[  5]  11.00-12.00  sec  1011 KBytes  8.28 Mbits/sec  129   10.5 KBytes       
+[  5]  12.00-13.00  sec  1.48 MBytes  12.4 Mbits/sec  152   3.95 KBytes       
+[  5]  13.00-14.00  sec  1.48 MBytes  12.4 Mbits/sec  115   2.63 KBytes       
+[  5]  14.00-15.00  sec  1.48 MBytes  12.4 Mbits/sec  139   1.32 KBytes       
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-15.00  sec  22.1 MBytes  12.3 Mbits/sec  2420             sender
+[  5]   0.00-15.21  sec  20.9 MBytes  11.5 Mbits/sec                  receiver
+
+iperf Done.
+containernet> ue2 ip -br addr show uesimtun0
+uesimtun0        UNKNOWN        10.46.0.2/16 fe80::48a7:6570:dc40:c502/64 
+containernet> ue2 iperf3 -c 10.46.0.1 -B 10.46.0.2 -t 15
+Connecting to host 10.46.0.1, port 5201
+[  5] local 10.46.0.2 port 51749 connected to 10.46.0.1 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec   371 KBytes  3.04 Mbits/sec   48   6.58 KBytes       
+[  5]   1.00-2.00   sec  94.8 KBytes   776 Kbits/sec   21   3.95 KBytes       
+[  5]   2.00-3.00   sec   190 KBytes  1.55 Mbits/sec   17   3.95 KBytes       
+[  5]   3.00-4.00   sec  94.8 KBytes   776 Kbits/sec   17   3.95 KBytes       
+[  5]   4.00-5.00   sec  94.8 KBytes   776 Kbits/sec   14   2.63 KBytes       
+[  5]   5.00-6.00   sec   190 KBytes  1.55 Mbits/sec   20   3.95 KBytes       
+[  5]   6.00-7.00   sec  94.8 KBytes   776 Kbits/sec   12   3.95 KBytes       
+[  5]   7.00-8.00   sec   190 KBytes  1.55 Mbits/sec   18   1.32 KBytes       
+[  5]   8.00-9.00   sec  94.8 KBytes   776 Kbits/sec   17   3.95 KBytes       
+[  5]   9.00-10.00  sec  94.8 KBytes   776 Kbits/sec   14   2.63 KBytes       
+[  5]  10.00-11.00  sec   190 KBytes  1.55 Mbits/sec   20   2.63 KBytes       
+[  5]  11.00-12.00  sec  94.8 KBytes   776 Kbits/sec   15   5.27 KBytes       
+[  5]  12.00-13.00  sec  94.8 KBytes   776 Kbits/sec   14   2.63 KBytes       
+[  5]  13.00-14.00  sec   190 KBytes  1.55 Mbits/sec   18   2.63 KBytes       
+[  5]  14.00-15.00  sec  94.8 KBytes   776 Kbits/sec   13   2.63 KBytes       
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-15.00  sec  2.12 MBytes  1.19 Mbits/sec  278             sender
+[  5]   0.00-15.06  sec  2.00 MBytes  1.11 Mbits/sec                  receiver
+
+iperf Done.
+containernet> ue1 ping -I uesimtun0 -c 5 10.46.0.2
+PING 10.46.0.2 (10.46.0.2) from 10.45.0.2 uesimtun0: 56(84) bytes of data.
+
+--- 10.46.0.2 ping statistics ---
+5 packets transmitted, 0 received, 100% packet loss, time 4133ms
+
+containernet> ue1 ping -I uesimtun0 -c 5 10.46.0.1
+PING 10.46.0.1 (10.46.0.1) from 10.45.0.2 uesimtun0: 56(84) bytes of data.
+
+--- 10.46.0.1 ping statistics ---
+5 packets transmitted, 0 received, 100% packet loss, time 4115ms
+
+containernet> ue1 ping -I uesimtun0 -c 3 10.33.33.9
+PING 10.33.33.9 (10.33.33.9) from 10.45.0.2 uesimtun0: 56(84) bytes of data.
+
+--- 10.33.33.9 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2055ms
+
+containernet> ue1 ping -c 3 10.33.33.9
+PING 10.33.33.9 (10.33.33.9) 56(84) bytes of data.
+
+--- 10.33.33.9 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2070ms
+
+containernet> ue1 ping -c 3 10.34.0.2
+PING 10.34.0.2 (10.34.0.2) 56(84) bytes of data.
+64 bytes from 10.34.0.2: icmp_seq=1 ttl=64 time=0.076 ms
+64 bytes from 10.34.0.2: icmp_seq=2 ttl=64 time=0.056 ms
+64 bytes from 10.34.0.2: icmp_seq=3 ttl=64 time=0.062 ms
+
+--- 10.34.0.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2062ms
+rtt min/avg/max/mdev = 0.056/0.064/0.076/0.008 ms
+containernet> ue1 ip route add 10.33.33.0/24 via 10.34.0.2
+containernet> ue1 ping -c 3 10.33.33.9
+PING 10.33.33.9 (10.33.33.9) 56(84) bytes of data.
+
+--- 10.33.33.9 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2054ms
+
+containernet> ue1 ip route del 10.33.33.0/24 via 10.34.0.2
+containernet> 

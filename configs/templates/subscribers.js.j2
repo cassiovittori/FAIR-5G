@@ -3,8 +3,9 @@ db = db.getSiblingDB("open5gs");
 
 const subs = [
 {% for slice in slices %}
+{% for ue in slice.ues %}
   {
-    imsi: "{{ slice.imsi }}",
+    imsi: "{{ ue.imsi }}",
     subscribed_rau_tau_timer: 12,
     network_access_mode: 0,
     subscriber_status: 0,
@@ -48,6 +49,7 @@ const subs = [
     schema_version: 1,
     __v: 0
   },
+{% endfor %}
 {% endfor %}
 ];
 

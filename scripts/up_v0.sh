@@ -24,6 +24,24 @@ preclean() {
   while sudo iptables -D DOCKER-USER -j ACCEPT 2>/dev/null; do :; done
 }
 
+# Refuse to start on top of a running environment. `compose up -d` reuses
+# running core containers, so the AMF/SMF keep the previous run's UE contexts
+# and PDU sessions: the new UEs get shifted addresses and the run is not clean.
+# It must run BEFORE preclean, which would remove the mn.* containers of the
+# running topology. onos-controller is left out on purpose: down keeps it when
+# FAIR5G_KEEP_ONOS=1, and a reused ONOS holds no UE state.
+refuse_if_running() {
+  local running
+  running="$(sudo docker ps --format '{{.Names}}' \
+    | grep -E '^(amf|nrf|gnb|mn\..+)$' || true)"
+  if [[ -n "$running" ]]; then
+    echo "[ERROR] The environment is already running. Containers found:"
+    echo "$running" | sed 's/^/          /'
+    echo "        Run './fair5g down' first. Nothing was changed."
+    exit 1
+  fi
+}
+
 need_cmd docker
 sudo docker compose version >/dev/null 2>&1 || {
   echo "[ERRO] Docker Compose plugin não encontrado."
@@ -46,6 +64,7 @@ echo "[v0] Repo: $REPO_ROOT"
 export FAIR5G_SLICE_COUNT="${FAIR5G_SLICE_COUNT:-2}"
 echo "[v0] Quantidade de fatias: $FAIR5G_SLICE_COUNT"
 
+refuse_if_running
 preclean
 
 cd "$REPO_ROOT"
@@ -72,10 +91,13 @@ else
 fi
 export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 
+
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
+# sudo drops the caller's environment: every variable auto_sdn.py reads must be
+# passed explicitly here, or it silently falls back to its default.
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
   FAIR5G_NO_CLI="${FAIR5G_NO_CLI:-}" \
+  FAIR5G_UES_PER_SLICE="${FAIR5G_UES_PER_SLICE:-}" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"
-

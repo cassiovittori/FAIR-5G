@@ -1,0 +1,14 @@
+qui 10 set 2026 19:11:20 -03
+               total        used        free      shared  buff/cache   available
+Mem:           7,7Gi       2,9Gi       1,4Gi        48Mi       3,4Gi       4,5Gi
+Swap:          2,0Gi          0B       2,0Gi
+{
+  "run_id": "2026-09-10_190948",
+  "slice_count": 2,
+  "config_dir": "",
+  "started_at": "2026-09-10T22:09:48.046475+00:00"
+}CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O     PIDS
+fe604f15a6ee   onos-controller   10.02%    837.8MiB / 7.709GiB   10.61%    85.9kB / 45.5kB   0B / 119MB    320
+21e3583fa69a   gnb               0.91%     3.82MiB / 7.709GiB    0.05%     24.1kB / 9.85kB   0B / 4.1kB    12
+ebf0d70bc3f3   upf1              0.00%     25.63MiB / 7.709GiB   0.32%     16.7kB / 21.4kB   0B / 16.4kB   3
+7e80148479ea   mn.ue1            1.07%     2.879MiB / 7.709GiB   0.04%     2.85kB / 126B     0B / 12.3kB   14
