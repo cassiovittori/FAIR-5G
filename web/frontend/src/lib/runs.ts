@@ -75,7 +75,8 @@ export interface RunFilters {
 export const DEFAULT_FILTERS: RunFilters = { q: '', statuses: [], from: '', to: '', slices: null, order: 'newest' }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
-const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+// busca sem acento e sem diferenciar maiúsculas (lista de ambientes e Guia)
+export const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 // dia LOCAL: new Date('YYYY-MM-DD') seria meia-noite UTC e erraria 3h no nosso fuso
 const localDay = (ymd: string, plusDays = 0) => {
   const [y, m, d] = ymd.split('-').map(Number)

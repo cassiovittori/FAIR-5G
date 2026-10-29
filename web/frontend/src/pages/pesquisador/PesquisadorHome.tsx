@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { listRuns, hostMetrics, stopEnvironment, type Run, type HostMetrics } from '@/lib/api'
+import { listRuns, hostMetrics, loadErrorMessage, stopEnvironment, type Run, type HostMetrics } from '@/lib/api'
+import { useToast } from '@/lib/toast'
 import { StatusDot } from '@/components/StatusDot'
 import { environmentLabel } from '@/lib/runs'
 import i18n from '@/i18n'
@@ -19,6 +20,7 @@ export default function PesquisadorHome() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stopping, setStopping] = useState(false)
+  const toast = useToast()
 
   async function load() {
     setLoading(true)
@@ -26,8 +28,8 @@ export default function PesquisadorHome() {
       const [runsData, metricsData] = await Promise.all([listRuns(), hostMetrics()])
       setRuns(runsData)
       setMetrics(metricsData)
-    } catch {
-      setError(i18n.t('home.loadError'))
+    } catch (err) {
+      setError(loadErrorMessage(err, i18n.t('home.loadError')))
     } finally {
       setLoading(false)
     }
@@ -72,7 +74,7 @@ export default function PesquisadorHome() {
       await stopEnvironment()
       await load()
     } catch(err) {
-      setError(err instanceof Error ? err.message : t('common.stopError'))
+      toast.error(err instanceof Error ? err.message : t('common.stopError'))
       await load()
     } finally {
       setStopping(false)

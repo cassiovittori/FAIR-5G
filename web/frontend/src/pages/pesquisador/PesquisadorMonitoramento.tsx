@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/chart'
 import { StatusDot } from '@/components/StatusDot'
 import {
-  listRuns, networkHistory, networkMetrics, networkNfs, stopEnvironment, streamLogs,
+  listRuns, loadErrorMessage, networkHistory, unavailableReason, networkMetrics, networkNfs, stopEnvironment, streamLogs,
   type NetworkMetrics, type NetworkNfs, type Run, type SliceSeries,
 } from '@/lib/api'
 import { environmentLabel } from '@/lib/runs'
+import { useToast } from '@/lib/toast'
 import { currentLocale } from '@/i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
  
@@ -188,6 +189,7 @@ export default function PesquisadorMonitoramento() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stopping, setStopping] = useState(false)
+  const toast = useToast()
   const [lines, setLines] = useState<string[]>([])
   const [showLog, setShowLog] = useState<boolean | null>(null) // null = padrão (aberto no starting e no stopping)
   const logRef = useRef<HTMLPreElement>(null)
@@ -214,8 +216,8 @@ export default function PesquisadorMonitoramento() {
         setNfs(null)
       }
       setError(null)
-    } catch {
-      setError(t('monitoramento.refreshError'))
+    } catch (err) {
+      setError(loadErrorMessage(err, t('monitoramento.refreshError')))
     } finally {
       setLoading(false)
     }
@@ -255,7 +257,8 @@ export default function PesquisadorMonitoramento() {
       await stopEnvironment()
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.stopError'))
+      // toast: o refresh() abaixo zera `error` e a mensagem sumiria na hora
+      toast.error(err instanceof Error ? err.message : t('common.stopError'))
       await refresh()
     } finally {
       setStopping(false)
@@ -328,7 +331,7 @@ export default function PesquisadorMonitoramento() {
       )}
  
       {running && net && 'reason' in net && (
-        <p className="text-sm text-muted-foreground">{t('monitoramento.networkUnavailable', { reason: net.reason })}</p>
+        <p className="text-sm text-muted-foreground">{t('monitoramento.networkUnavailable', { reason: unavailableReason(net) })}</p>
       )}
  
       {running && net?.available && (
@@ -427,7 +430,7 @@ export default function PesquisadorMonitoramento() {
             {!nfs ? (
               <Skeleton className="h-64" />
             ) : 'reason' in nfs ? (
-              <p className="text-sm text-muted-foreground">{t('monitoramento.nfsUnavailable', { reason: nfs.reason })}</p>
+              <p className="text-sm text-muted-foreground">{t('monitoramento.nfsUnavailable', { reason: unavailableReason(nfs) })}</p>
             ) : (
               <Card className="px-3 py-2">
                 <Table>

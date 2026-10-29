@@ -21,6 +21,7 @@ export default function PesquisadorShell() {
   const inAmbientes = pathname.startsWith("/pesquisador/ambientes") // inclui ambientes-ativos e /ambientes/:runId
   const inMonitoramento = pathname === "/pesquisador/monitoramento"
   const inModelos = pathname === "/pesquisador/modelos"
+  const inGuia = pathname === "/pesquisador/guia"
 
   // "Todos os Ambientes" também vale para o detalhe de um run
   const isSubActive = (to: string) =>
@@ -124,8 +125,15 @@ export default function PesquisadorShell() {
             <div>
               <p className="px-2 text-xs font-medium text-muted-foreground">{t("sidebar.resources")}</p>
               <div className="mt-2 space-y-1">
-                <Link to="/pesquisador/guia" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <BookOpen className="h-4 w-4" />
+                <Link
+                  to="/pesquisador/guia"
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                    inGuia
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <BookOpen className={`h-4 w-4 ${inGuia ? "text-[#F5A623]" : ""}`} />
                   {t("sidebar.guide")}
                 </Link>
               </div>

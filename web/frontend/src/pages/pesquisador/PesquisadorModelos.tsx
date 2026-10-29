@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { deletePreset, listPresets, updatePreset, type Preset, type PresetTipo } from '@/lib/api'
+import { deletePreset, listPresets, loadErrorMessage, updatePreset, type Preset, type PresetTipo } from '@/lib/api'
 import { configSummary, fmtDateTime } from '@/lib/runs'
 import i18n from '@/i18n'
 
@@ -17,13 +17,13 @@ const presetLabel = (p: Preset) => p.nome?.trim() || i18n.t('modelos.untitledDra
 export default function PesquisadorModelos() {
   const { t } = useTranslation()
   const [presets, setPresets] = useState<Preset[] | null>(null)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Preset | null>(null)
 
   useEffect(() => {
     listPresets()
       .then(setPresets)
-      .catch(() => setLoadError(true))
+      .catch((err) => setLoadError(loadErrorMessage(err, i18n.t('modelos.loadError'))))
   }, [])
 
   // a lista vem por updated_at desc: o item editado sobe para o topo, como no backend
@@ -45,7 +45,7 @@ export default function PesquisadorModelos() {
         <Button asChild><Link to="/pesquisador/novo">{t('common.createEnvironment')}</Link></Button>
       </div>
 
-      {loadError && <p className="text-sm text-destructive">{t('modelos.loadError')}</p>}
+      {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
 
       {sections.map((section) => {
         const items = presets?.filter((p) => p.tipo === section.tipo) ?? []

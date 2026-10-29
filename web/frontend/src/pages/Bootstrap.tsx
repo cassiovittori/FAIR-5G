@@ -44,8 +44,9 @@ export default function Bootstrap() {
           await refresh() // atualiza o context -> BootstrapGate libera o menu sem reload
         }
       )
-    } catch {
-      setError(t("bootstrap.startError"))
+    } catch (err) {
+      // runBootstrap já cai em "bootstrap.startError" quando o backend não diz o motivo
+      setError(err instanceof Error ? err.message : t("bootstrap.startError"))
       setPhase("error")
     }
   }

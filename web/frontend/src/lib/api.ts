@@ -16,17 +16,79 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-// o FastAPI manda `detail` como string (HTTPException) ou como lista de erros (422 do pydantic);
-// a lista não é legível para o usuário, então cai na mensagem genérica
-function detailMessage(body: unknown): string | null {
-  const detail = (body as { detail?: unknown } | null)?.detail
-  return typeof detail === "string" ? detail : null
+export class ApiError extends Error {
+  status: number
+  code?: string
+  params?: Record<string, unknown>
+  constructor(message: string, status: number, code?: string, params?: Record<string, unknown>) {
+    super(message)
+    this.status = status
+    this.code = code
+    this.params = params
+  }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// código do backend -> texto no idioma atual (chave `errors.<code>`); sem a chave, null
+function translateCode(code: string, params: Record<string, unknown> = {}): string | null {
+  const key = `errors.${code}`
+  if (!i18n.exists(key)) return null
+  // chave dinâmica: o t tipado só aceita chaves literais. O param `context` escolhe a
+  // variante da chave (errors.run_busy_starting...)
+  const t = i18n.t as unknown as (key: string, options?: Record<string, unknown>) => string
+  return t(key, params)
+}
+
+interface ErrorDetail { code: string; params?: Record<string, unknown>; message?: string }
+const isErrorDetail = (d: unknown): d is ErrorDetail =>
+  typeof d === "object" && d != null && !Array.isArray(d) && typeof (d as ErrorDetail).code === "string"
+
+// Formato do backend: {detail: {code, params, message}} (ver web/backend/errors.py).
+// Também aceita o formato antigo: `detail` string (proxy, backend antigo) ou lista (422 antigo do pydantic).
+// `fallback` substitui o "Erro <status>" genérico quando a resposta não diz nada legível.
+export async function parseErrorResponse(res: Response, fallback?: string): Promise<ApiError> {
+  const body = await res.json().catch(() => null)
+  const detail = (body as { detail?: unknown } | null)?.detail
+  const generic = fallback ?? i18n.t("common.httpError", { status: res.status })
+
+  if (isErrorDetail(detail)) {
+    const params = { ...(detail.params ?? {}) }
+    if (detail.code === "validation_error") {
+      const errors = Array.isArray(params.errors) ? (params.errors as { field?: string }[]) : []
+      params.fields = errors.map((e) => e.field).filter(Boolean).join(", ")
+    }
+    const message = translateCode(detail.code, params) ?? detail.message ?? translateCode("unknown") ?? generic
+    return new ApiError(message, res.status, detail.code, params)
+  }
+  if (typeof detail === "string") return new ApiError(detail, res.status)
+  return new ApiError(generic, res.status)
+}
+
+// erro ao CARREGAR dados de uma tela: sem conexão diz o motivo; o resto fica com o texto da própria tela
+// (ex.: "Não foi possível carregar os ambientes agora.")
+export const loadErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof ApiError && err.code === "network_error" ? err.message : fallback
+
+// `{available: false, reason}` das métricas: traduz pelo reason_code, senão o texto do backend
+export const unavailableReason = (r: { reason: string; reason_code?: string }) =>
+  (r.reason_code && translateCode(r.reason_code)) || r.reason
+
+// sessão recusada pelo backend (token expirado/inválido): o AuthProvider escuta, desloga e avisa
+export const UNAUTHORIZED_EVENT = "fair5g:unauthorized"
+
+// backend fora do ar / sem rede: o fetch lança TypeError com texto do navegador (em inglês)
+async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_URL}${path}`, init)
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err
+    throw new ApiError(i18n.t("errors.network_error"), 0, "network_error")
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, fallback?: string): Promise<T> {
   const token = getToken()
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await apiFetch(path, {
     ...options,
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -36,8 +98,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   })
 
   if (!res.ok) {
-    const detail = await res.json().catch(() => null)
-    throw new ApiError(detailMessage(detail) ?? i18n.t("common.httpError", { status: res.status }), res.status)
+    const err = await parseErrorResponse(res, fallback)
+    if (res.status === 401 && token) window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT, { detail: err.message }))
+    throw err
   }
 
   // 204 (DELETE) não tem corpo
@@ -59,16 +122,14 @@ export async function login(email: string, password: string) {
   body.set("username", email)
   body.set("password", password)
 
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await apiFetch("/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   })
 
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null)
-    throw new Error(detailMessage(detail) ?? i18n.t("auth.loginFailed"))
-  }
+  // form-urlencoded (OAuth2), por isso não passa pelo request()
+  if (!res.ok) throw await parseErrorResponse(res, i18n.t("auth.loginFailed"))
 
   const data = await res.json()
   setToken(data.access_token)
@@ -91,20 +152,11 @@ export interface BootstrapStatus {
   checks: { docker: boolean; mn: boolean; openflow: boolean; ue_image: boolean }
 }
 
-export async function bootstrapStatus(): Promise<BootstrapStatus> {
-  const res = await fetch(`${API_URL}/bootstrap/status`)
-  if (!res.ok) throw new Error(i18n.t("errors.bootstrapStatus"))
-  return res.json()
-}
+export const bootstrapStatus = () =>
+  request<BootstrapStatus>("/bootstrap/status", {}, i18n.t("errors.bootstrapStatus"))
 
-export async function runBootstrap(force = false): Promise<{ status: string; message?: string }> {
-  const res = await fetch(`${API_URL}/bootstrap?force=${force}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) throw new Error(i18n.t("bootstrap.startError"))
-  return res.json()
-}
+export const runBootstrap = (force = false) =>
+  request<{ status: string; message?: string }>(`/bootstrap?force=${force}`, { method: "POST" }, i18n.t("bootstrap.startError"))
 
 // lê o SSE via fetch (EventSource não manda Authorization header)
 export function streamLogs(
@@ -176,78 +228,26 @@ export interface Run {
 
 export const getRun = (runId: string) => api.get<Run>(`/runs/${runId}`)
 
-export async function listRuns(): Promise<Run[]> {
-  const res = await fetch(`${API_URL}/runs`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) throw new Error(i18n.t("errors.listRuns"))
-  return res.json()
-}
+export const listRuns = () => request<Run[]>("/runs", {}, i18n.t("errors.listRuns"))
 
 export interface HostMetrics {
   cpu_percent: number
   memory_percent: number
 }
 
-export async function hostMetrics(): Promise<HostMetrics> {
-  const res = await fetch(`${API_URL}/metrics/host`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) throw new Error(i18n.t("errors.hostMetrics"))
-  return res.json()
-}
+export const hostMetrics = () => request<HostMetrics>("/metrics/host", {}, i18n.t("errors.hostMetrics"))
 
 // "disjuntor": roda o down mesmo sem ambiente registrado. Devolve o caminho do stream de log.
-export async function forceCleanup(): Promise<{ log: string }> {
-  const res = await fetch(`${API_URL}/cleanup`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    throw new ApiError(detailMessage(data) ?? i18n.t("common.httpError", { status: res.status }), res.status)
-  }
-  return res.json()
-}
+export const forceCleanup = () => request<{ log: string }>("/cleanup", { method: "POST" })
 
-export async function stopEnvironment(): Promise<{ run_id: string; status: string }> {
-  const res = await fetch(`${API_URL}/down`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    throw new ApiError(typeof data?.detail === "string" ? data.detail : i18n.t("common.stopError"), res.status)
-  }
-  return res.json()
-}
-
-export class ApiError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
-}
+export const stopEnvironment = () =>
+  request<{ run_id: string; status: string }>("/down", { method: "POST" }, i18n.t("common.stopError"))
 
 export type UpConfig = Record<string, number | number[]>
 
-export async function startEnvironment(config: UpConfig, nome?: string): Promise<{ run_id: string }> {
-  const res = await fetch(`${API_URL}/up`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken()}`,
-    },
-    body: JSON.stringify(nome ? { ...config, nome } : config),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    const msg = typeof data?.detail === "string" ? data.detail : i18n.t("common.httpError", { status: res.status })
-    throw new ApiError(msg, res.status)
-  }
-  return res.json()
-}
+// 409 (ambiente em uso) chega como ApiError com status 409: o formulário mostra o card de conflito
+export const startEnvironment = (config: UpConfig, nome?: string) =>
+  api.post<{ run_id: string }>("/up", nome ? { ...config, nome } : config)
 
 // Métricas de rede (Prometheus via backend) ---------------------------------
 export interface SliceMetrics {
@@ -265,7 +265,7 @@ export interface SliceMetrics {
 }
 
 export type NetworkMetrics =
-  | { available: false; reason: string }
+  | { available: false; reason: string; reason_code?: string }
   | { available: true; global: { ues: number | null; gnbs: number | null }; slices: SliceMetrics[] }
 
 export const networkMetrics = () => api.get<NetworkMetrics>("/metrics/network")
@@ -275,7 +275,7 @@ export interface SeriesPoint { t: number; v: number | null }
 export interface SliceSeries { id: number; ue?: number; points: SeriesPoint[] }
 
 export type NetworkHistory =
-  | { available: false; reason: string }
+  | { available: false; reason: string; reason_code?: string }
   | { available: true; step: number; minutes: number; series: Record<string, SliceSeries[]> }
 
 export const networkHistory = (minutes = 15, metrics?: string[]) =>
@@ -285,7 +285,7 @@ export const networkHistory = (minutes = 15, metrics?: string[]) =>
 
 export interface NfStatus { job: string; instance: string; up: boolean; memory_mb: number | null }
 export type NetworkNfs =
-  | { available: false; reason: string }
+  | { available: false; reason: string; reason_code?: string }
   | { available: true; nfs: NfStatus[] }
 
 export const networkNfs = () => api.get<NetworkNfs>("/metrics/network/nfs")

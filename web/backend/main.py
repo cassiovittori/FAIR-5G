@@ -7,11 +7,14 @@ import shlex
 import time
 import shutil
 import psutil
+import logging
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, Depends, BackgroundTasks, Query
 from typing import Literal
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -24,10 +27,71 @@ from users_store import create_user, get_user_by_email, any_admin_exists
 from db import create_db_and_tables, get_session, engine
 from runs_store import create_run, update_run, get_run, get_active_run, list_runs, get_busy_run
 from presets_store import create_preset, get_preset, list_presets, count_presets, update_preset, delete_preset
+from errors import AppError, ErrorCode, ReasonCode, error_detail
 from network_metrics import collect_network_metrics, collect_network_history, collect_nfs, HISTORY, REPO_ROOT
 from pydantic import BaseModel, Field
 
 app = FastAPI()
+
+
+# Erros: todo 4xx/5xx em JSON sai como {"detail": {code, params, message}} (ver errors.py).
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request, exc: StarletteHTTPException):
+    detail = exc.detail
+    if not isinstance(detail, dict):  # HTTPException com texto: 401 do OAuth2, 404/405 de rota...
+        message = str(detail)
+        code = ErrorCode.NOT_AUTHENTICATED if exc.status_code == 401 and message == "Not authenticated" else f"http_{exc.status_code}"
+        detail = error_detail(code, message)
+    return JSONResponse({"detail": detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request, exc: RequestValidationError):
+    errors = [
+        # loc vem como ("body", "slices") / ("query", "minutes"): o campo é o resto
+        {"field": ".".join(str(p) for p in e["loc"][1:]) or str(e["loc"][0]), "type": e["type"]}
+        for e in exc.errors()
+    ]
+    campos = ", ".join(e["field"] for e in errors)
+    return JSONResponse(
+        {"detail": error_detail(ErrorCode.VALIDATION_ERROR, f"campos inválidos: {campos}", errors=errors)},
+        status_code=422,
+    )
+
+
+class InternalErrorMiddleware:
+    """Exceção não tratada -> 500 no formato padrão, sem stack trace na resposta (vai pro log).
+    ASGI puro, e não exception_handler(Exception): o handler de Exception roda no
+    ServerErrorMiddleware, por fora do CORS, e o navegador veria só um erro de CORS."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        started = False
+
+        async def tracked_send(message):
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracked_send)
+        except Exception:
+            logging.getLogger("fair5g").exception("erro não tratado em %s %s", scope.get("method"), scope.get("path"))
+            if started:  # resposta (ex.: SSE) já começou: não dá pra trocar por um 500
+                raise
+            response = JSONResponse(
+                {"detail": error_detail(ErrorCode.INTERNAL_ERROR, "erro interno do servidor")}, status_code=500
+            )
+            await response(scope, receive, send)
+
+
+# antes do CORS: o CORS precisa ficar por fora para o 500 também levar os cabeçalhos dele
+app.add_middleware(InternalErrorMiddleware)
 
 # REPO_ROOT vem do network_metrics (calculado a partir do arquivo, não fixo no código)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -59,13 +123,14 @@ def _validate_ues_per_slice(raw, slice_count: int) -> list[int]:
 
 def validate_up_config(slices, ues_per_slice) -> dict:
     """Valida e normaliza o que vira flag do up (sem `nome`). Usado pelo /up e pelos presets,
-    então template/rascunho só guardam config que o /up aceitaria. Levanta HTTPException 422."""
+    então template/rascunho só guardam config que o /up aceitaria. Levanta AppError 422."""
     if isinstance(slices, bool) or not isinstance(slices, int) or not 1 <= slices <= 8:
-        raise HTTPException(status_code=422, detail="slices deve ser um inteiro entre 1 e 8")
+        raise AppError(422, ErrorCode.INVALID_SLICES, "slices deve ser um inteiro entre 1 e 8", min=1, max=8)
     try:
         ues = _validate_ues_per_slice(ues_per_slice, slices)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        # o upstream só lança ValueError com texto (em inglês): vai como `reason`
+        raise AppError(422, ErrorCode.INVALID_UES_PER_SLICE, str(e), reason=str(e))
     return {"slices": slices, "ues_per_slice": ues}
 
 
@@ -85,10 +150,10 @@ class UserOut(BaseModel):
 def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)) -> User:
     email = decode_access_token(token)
     if email is None:
-        raise HTTPException(status_code=401, detail="token inválido")
+        raise AppError(401, ErrorCode.TOKEN_INVALID, "token inválido")
     user = get_user_by_email(session, email)
     if user is None:
-        raise HTTPException(status_code=401, detail="usuário não encontrado")
+        raise AppError(401, ErrorCode.USER_NOT_FOUND, "usuário não encontrado")
     return user
 
 
@@ -188,9 +253,9 @@ def force_cleanup(
     busy = get_busy_run(session)
     if busy is not None and busy.status in ("starting", "stopping"):
         estados = {"starting": "sendo criado", "stopping": "sendo encerrado"}
-        raise HTTPException(status_code=409, detail=f"Há um ambiente {estados[busy.status]}. Aguarde terminar.")
+        raise AppError(409, ErrorCode.RUN_BUSY, f"Há um ambiente {estados[busy.status]}. Aguarde terminar.", context=busy.status)
     if _cleanup_in_progress():
-        raise HTTPException(status_code=409, detail="Já existe uma limpeza em andamento.")
+        raise AppError(409, ErrorCode.CLEANUP_IN_PROGRESS, "Já existe uma limpeza em andamento.")
 
     if busy is not None:  # running: derruba pelo caminho normal, o run termina como "stopped"
         down_log = _start_down(busy.run_id)
@@ -307,10 +372,10 @@ def start_testbed(
     busy = get_busy_run(session)
     if busy is not None:
         estados = {"starting": "sendo criado", "running": "ativo", "stopping": "sendo encerrado"}
-        raise HTTPException(status_code=409, detail=f"já existe um ambiente {estados[busy.status]}")
+        raise AppError(409, ErrorCode.RUN_BUSY, f"já existe um ambiente {estados[busy.status]}", context=busy.status)
     if _cleanup_in_progress():
         # 423 e não 409: o front trata 409 como "ambiente em uso" e oferece "Parar"
-        raise HTTPException(status_code=423, detail="Há uma limpeza em andamento. Aguarde terminar.")
+        raise AppError(423, ErrorCode.CLEANUP_IN_PROGRESS, "Há uma limpeza em andamento. Aguarde terminar.")
 
     # nome já tem coluna própria; o config guarda só o que vira flag do up
     config = validate_up_config(body.slices, body.ues_per_slice)
@@ -358,7 +423,7 @@ def run_detail(
 ):
     run = get_run(session, run_id, user_id=current_user.id)
     if run is None:
-        raise HTTPException(status_code=404, detail="run não encontrado")
+        raise AppError(404, ErrorCode.RUN_NOT_FOUND, "run não encontrado", run_id=run_id)
     return run
 
 
@@ -383,7 +448,7 @@ def _preset_fields(tipo: str, nome: str | None, descricao: str | None) -> dict:
     """Normaliza nome/descrição: template exige nome; rascunho não tem descrição."""
     nome = (nome or "").strip() or None
     if tipo == "template" and nome is None:
-        raise HTTPException(status_code=422, detail="template precisa de um nome")
+        raise AppError(422, ErrorCode.PRESET_NAME_REQUIRED, "template precisa de um nome")
     descricao = ((descricao or "").strip() or None) if tipo == "template" else None
     return {"nome": nome, "descricao": descricao}
 
@@ -391,7 +456,7 @@ def _preset_fields(tipo: str, nome: str | None, descricao: str | None) -> dict:
 def _preset_or_404(session: Session, preset_id: int, user_id: int):
     preset = get_preset(session, preset_id, user_id=user_id)
     if preset is None:
-        raise HTTPException(status_code=404, detail="preset não encontrado")
+        raise AppError(404, ErrorCode.PRESET_NOT_FOUND, "preset não encontrado")
     return preset
 
 
@@ -413,7 +478,10 @@ def preset_create(
     fields = _preset_fields(body.tipo, body.nome, body.descricao)
     config = validate_up_config(body.config.get("slices"), body.config.get("ues_per_slice"))
     if count_presets(session, user_id=current_user.id, tipo=body.tipo) >= PRESETS_LIMIT:
-        raise HTTPException(status_code=422, detail=f"limite de {PRESETS_LIMIT} itens deste tipo atingido; exclua algum antes")
+        raise AppError(
+            422, ErrorCode.PRESET_LIMIT_REACHED,
+            f"limite de {PRESETS_LIMIT} itens deste tipo atingido; exclua algum antes", limit=PRESETS_LIMIT,
+        )
     return create_preset(session, tipo=body.tipo, config=config, user_id=current_user.id, **fields)
 
 
@@ -477,7 +545,7 @@ async def stream_up_logs(
     session: Session = Depends(get_session),
 ):
     if get_run(session, run_id, user_id=current_user.id) is None:
-        raise HTTPException(status_code=404, detail="run não encontrado")
+        raise AppError(404, ErrorCode.RUN_NOT_FOUND, "run não encontrado", run_id=run_id)
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "up.log")
     return StreamingResponse(tail_log(log_path), media_type="text/event-stream")
 
@@ -490,7 +558,7 @@ async def stream_down_logs(
     session: Session = Depends(get_session),
 ):
     if get_run(session, run_id, user_id=current_user.id) is None:
-        raise HTTPException(status_code=404, detail="run não encontrado")
+        raise AppError(404, ErrorCode.RUN_NOT_FOUND, "run não encontrado", run_id=run_id)
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "down.log")
     return StreamingResponse(tail_log(log_path), media_type="text/event-stream")
 
@@ -579,12 +647,11 @@ def stop_testbed(
     if active is None:
         busy = get_busy_run(session)
         if busy is not None and busy.status == "starting":
-            detail = "O ambiente ainda está sendo criado. Aguarde ele ficar ativo para poder pará-lo."
-        elif busy is not None and busy.status == "stopping":
-            detail = "O ambiente já está sendo encerrado."
-        else:
-            detail = "Nenhum ambiente ativo para parar."
-        raise HTTPException(status_code=409, detail=detail)
+            raise AppError(409, ErrorCode.STOP_WHILE_STARTING,
+                           "O ambiente ainda está sendo criado. Aguarde ele ficar ativo para poder pará-lo.")
+        if busy is not None and busy.status == "stopping":
+            raise AppError(409, ErrorCode.ALREADY_STOPPING, "O ambiente já está sendo encerrado.")
+        raise AppError(409, ErrorCode.NOTHING_TO_STOP, "Nenhum ambiente ativo para parar.")
 
     down_log_path = _start_down(active.run_id, wipe=wipe, keep_onos=keep_onos)
 
@@ -597,10 +664,11 @@ def stop_testbed(
 @app.post("/auth/register", response_model=UserOut)
 def register(body: RegisterRequest, session: Session = Depends(get_session)):
     if body.role not in ALLOWED_SELF_SIGNUP_ROLES:
-        raise HTTPException(status_code=422, detail=f"role deve ser um de: {', '.join(ALLOWED_SELF_SIGNUP_ROLES)}")
+        roles = ", ".join(sorted(ALLOWED_SELF_SIGNUP_ROLES))
+        raise AppError(422, ErrorCode.INVALID_ROLE, f"role deve ser um de: {roles}", roles=roles)
 
     if get_user_by_email(session, body.email) is not None:
-        raise HTTPException(status_code=409, detail="e-mail já cadastrado")
+        raise AppError(409, ErrorCode.EMAIL_TAKEN, "e-mail já cadastrado")
 
     user = create_user(session, email=body.email, password_hash=hash_password(body.password), role=body.role)
     return user
@@ -610,7 +678,7 @@ def register(body: RegisterRequest, session: Session = Depends(get_session)):
 def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = get_user_by_email(session, form_data.username)
     if user is None or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="e-mail ou senha inválidos")
+        raise AppError(401, ErrorCode.INVALID_CREDENTIALS, "e-mail ou senha inválidos")
 
     token = create_access_token(subject=user.email)
     return {"access_token": token, "token_type": "bearer"}
@@ -652,11 +720,11 @@ def network_metrics(
 ):
     run = get_active_run(session)
     if run is None:
-        return {"available": False, "reason": "nenhum ambiente ativo"}
+        return {"available": False, "reason": "nenhum ambiente ativo", "reason_code": ReasonCode.NO_ACTIVE_RUN}
     try:
         return {"available": True, **collect_network_metrics(run.slice_count, _run_ues(run))}
     except OSError:  # Prometheus fora do ar ou lento (inclui URLError e timeout)
-        return {"available": False, "reason": "prometheus indisponível"}
+        return {"available": False, "reason": "prometheus indisponível", "reason_code": ReasonCode.PROMETHEUS_UNREACHABLE}
     
 @app.get("/metrics/network/history")
 def network_history(
@@ -669,11 +737,11 @@ def network_history(
     if names:
         invalid = [n for n in names if n not in HISTORY]
         if invalid:
-            raise HTTPException(status_code=422, detail=f"métricas desconhecidas: {invalid}")
+            raise AppError(422, ErrorCode.UNKNOWN_METRICS, f"métricas desconhecidas: {invalid}", metrics=", ".join(invalid))
 
     run = get_active_run(session)
     if run is None:
-        return {"available": False, "reason": "nenhum ambiente ativo"}
+        return {"available": False, "reason": "nenhum ambiente ativo", "reason_code": ReasonCode.NO_ACTIVE_RUN}
 
     started = run.started_at
     since = None
@@ -685,7 +753,7 @@ def network_history(
     try:
         return {"available": True, **collect_network_history(run.slice_count, _run_ues(run), minutes, since, names)}
     except OSError:
-        return {"available": False, "reason": "prometheus indisponível"}
+        return {"available": False, "reason": "prometheus indisponível", "reason_code": ReasonCode.PROMETHEUS_UNREACHABLE}
 
 @app.get("/metrics/network/nfs")
 def network_nfs(
@@ -693,8 +761,8 @@ def network_nfs(
     session: Session = Depends(get_session),
 ):
     if get_active_run(session) is None:
-        return {"available": False, "reason": "nenhum ambiente ativo"}
+        return {"available": False, "reason": "nenhum ambiente ativo", "reason_code": ReasonCode.NO_ACTIVE_RUN}
     try:
         return {"available": True, "nfs": collect_nfs()}
     except OSError:
-        return {"available": False, "reason": "prometheus indisponível"}
+        return {"available": False, "reason": "prometheus indisponível", "reason_code": ReasonCode.PROMETHEUS_UNREACHABLE}

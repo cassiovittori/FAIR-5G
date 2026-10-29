@@ -2,7 +2,6 @@ import './App.css'
 import { Routes, Route, Navigate } from 'react-router'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import ListaAmbientes from './pages/ListaAmbientes'
 import Trilha from './pages/Trilha'
 import Bootstrap from './pages/Bootstrap'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -15,6 +14,7 @@ import PesquisadorMonitoramento from './pages/pesquisador/PesquisadorMonitoramen
 import PesquisadorAmbientes from './pages/pesquisador/PesquisadorAmbientes'
 import PesquisadorAmbienteDetalhe from './pages/pesquisador/PesquisadorAmbienteDetalhe'
 import PesquisadorModelos from './pages/pesquisador/PesquisadorModelos'
+import PesquisadorGuia from './pages/pesquisador/PesquisadorGuia'
 
 function App() {
   return (
@@ -36,6 +36,7 @@ function App() {
               <Route path="/pesquisador/ambientes-ativos" element={<PesquisadorAmbientes onlyActive />} />
               <Route path="/pesquisador/ambientes/:runId" element={<PesquisadorAmbienteDetalhe />} /> 
               <Route path="/pesquisador/modelos" element={<PesquisadorModelos />} />
+              <Route path="/pesquisador/guia" element={<PesquisadorGuia />} />
             </Route>
             <Route path="/tutorial" element={<Trilha />} />
           </Route>

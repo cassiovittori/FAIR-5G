@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Info, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,13 +12,28 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  ApiError, createPreset, deletePreset, getPreset, getRun, listPresets, startEnvironment, stopEnvironment, updatePreset,
+  ApiError, createPreset, loadErrorMessage, deletePreset, getPreset, getRun, listPresets, startEnvironment, stopEnvironment, updatePreset,
   type Preset, type UpConfig,
 } from '@/lib/api'
 import { CAMPOS, UES_PER_SLICE, UES_SOFT_WARNING_TOTAL } from '@/lib/up-fields'
 import i18n from '@/i18n'
 
 type UesMode = 'all' | 'per-slice'
+
+// abre o Guia em outra aba para não sair do formulário (e não cair no aviso de rascunho)
+function LearnMore({ anchor }: { anchor: string }) {
+  const { t } = useTranslation()
+  return (
+    <Link
+      to={`/pesquisador/guia?aba=campos#${anchor}`}
+      target="_blank"
+      rel="noopener"
+      className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
+    >
+      {t('guide.learnMore')}
+    </Link>
+  )
+}
 
 const isUeCount = (n: number) => Number.isInteger(n) && n >= UES_PER_SLICE.min && n <= UES_PER_SLICE.max
 
@@ -45,7 +61,9 @@ export default function PesquisadorNovo() {
   const leavingRef = useRef(false) // ambiente criado: a navegação para o monitoramento não pergunta
   const [submitting, setSubmitting] = useState(false)
   const [stopping, setStopping] = useState(false)
-  const [conflict, setConflict] = useState(false)
+  // 409 do /up: outro ambiente em uso. `context` = estado dele (starting | running | stopping)
+  const [conflict, setConflict] = useState<{ message: string; context?: string } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null) // informativo, não é erro
   const [error, setError] = useState<string | null>(null)
   const [nome, setNome] = useState<string>('')
   const [uesMode, setUesMode] = useState<UesMode>('all')
@@ -118,7 +136,7 @@ export default function PesquisadorNovo() {
         setCopiedFrom(run.run_id)
         if (run.nome) setNome(i18n.t('novo.copyName', { name: run.nome }))
       })
-      .catch(() => setError(i18n.t('novo.loadSourceError')))
+      .catch((err) => setError(loadErrorMessage(err, i18n.t('novo.loadSourceError'))))
   }, [from, applyConfig])
 
   // ?template=<id>: só o config; o nome do template não vira nome do ambiente
@@ -130,7 +148,7 @@ export default function PesquisadorNovo() {
         applyConfig(preset.config)
         setFromTemplate(preset.nome)
       })
-      .catch(() => setError(i18n.t('novo.loadTemplateError')))
+      .catch((err) => setError(loadErrorMessage(err, i18n.t('novo.loadTemplateError'))))
   }, [from, templateParam, applyConfig])
 
   // ?draft=<id>: config + nome do ambiente digitado
@@ -143,7 +161,7 @@ export default function PesquisadorNovo() {
         setNome(preset.nome ?? '')
         setDraftId(preset.id)
       })
-      .catch(() => setError(i18n.t('novo.loadDraftError')))
+      .catch((err) => setError(loadErrorMessage(err, i18n.t('novo.loadDraftError'))))
   }, [from, templateParam, draftParam, applyConfig])
 
   // "Começar de um template": só no form em branco
@@ -206,7 +224,8 @@ export default function PesquisadorNovo() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setConflict(false)
+    setConflict(null)
+    setNotice(null)
 
     const config = buildConfig()
     if (!config) return
@@ -220,7 +239,8 @@ export default function PesquisadorNovo() {
       navigate('/pesquisador/monitoramento')
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setConflict(true)
+        const context = typeof err.params?.context === 'string' ? err.params.context : undefined
+        setConflict({ message: err.message, context })
       } else {
         setError(err instanceof Error ? err.message : t('novo.createError'))
       }
@@ -268,8 +288,8 @@ export default function PesquisadorNovo() {
     setStopping(true)
     try {
       await stopEnvironment()
-      setConflict(false)
-      setError(t('novo.stoppingNotice'))
+      setConflict(null)
+      setNotice(t('novo.stoppingNotice'))
     } catch(err) {
       setError(err instanceof Error ? err.message : t('common.stopError'))
     } finally {
@@ -314,24 +334,6 @@ export default function PesquisadorNovo() {
         </div>
       )}
 
-      {conflict && (
-        <Card className="border-[#F5A623]">
-          <CardHeader>
-            <CardTitle className="text-sm">{t('novo.conflictTitle')}</CardTitle>
-            <CardDescription>
-              {t('novo.conflictDescription')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex gap-2">
-            <Button asChild variant="outline" className="flex-1">
-              <Link to="/pesquisador/monitoramento">{t('novo.viewEnvironment')}</Link>
-            </Button>
-            <Button variant="outline" className="flex-1" onClick={handleStop} disabled={stopping}>
-              {stopping ? t('common.stopping') : t('common.stop')}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       <form onSubmit={handleSubmit}>
         <Card>
@@ -367,7 +369,8 @@ export default function PesquisadorNovo() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {t(c.descricaoKey)} {t('novo.fieldRange', { min: c.min, max: c.max, default: c.padrao })}
+                  {t(c.descricaoKey)} {t('novo.fieldRange', { min: c.min, max: c.max, default: c.padrao })}{' '}
+                  <LearnMore anchor={`campo-${c.nome}`} />
                 </p>
               </div>
             ))}
@@ -419,7 +422,9 @@ export default function PesquisadorNovo() {
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground">{t('novo.ues.description')}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('novo.ues.description')} <LearnMore anchor="campo-ues" />
+              </p>
               {totalUes != null && (
                 <p className="text-sm">
                   {t('novo.ues.total', { count: totalUes })}
@@ -430,7 +435,35 @@ export default function PesquisadorNovo() {
               )}
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            {notice && (
+              <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                {notice}
+              </p>
+            )}
+            {/* junto dos botões: é ali que o usuário está olhando quando clica em "Criar" */}
+            {conflict && (
+              <div role="alert" className="space-y-3 rounded-lg border border-[#F5A623]/50 bg-[#F5A623]/10 p-3 text-sm">
+                <p className="flex items-start gap-2">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#F5A623]" />
+                  <span className="font-medium">{conflict.message}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/pesquisador/monitoramento">
+                      {conflict.context === 'running' ? t('novo.viewEnvironment') : t('common.follow')}
+                    </Link>
+                  </Button>
+                  {/* só dá para parar um ambiente ativo; subindo ou encerrando, o backend recusa */}
+                  {(conflict.context === 'running' || conflict.context == null) && (
+                    <Button type="button" size="sm" variant="outline" onClick={handleStop} disabled={stopping}>
+                      {stopping ? t('common.stopping') : t('common.stop')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <SaveTemplateDialog

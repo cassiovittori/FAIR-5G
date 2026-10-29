@@ -10,7 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { StatusDot } from '@/components/StatusDot'
-import { listRuns, stopEnvironment, type Run } from '@/lib/api'
+import { ApiError, listRuns, stopEnvironment, type Run } from '@/lib/api'
+import { useToast } from '@/lib/toast'
 import {
   ALL_STATUSES, DEFAULT_FILTERS, MAX_SLICES, environmentLabel, filterRuns, filtersToParams, fmtDateTime, fmtDuration,
   hasActiveFilters, parseFilters, type RunFilters,
@@ -20,15 +21,16 @@ const PAGE_SIZES = [10, 20, 50] as const
 const BUSY: Run['status'][] = ['starting', 'running', 'stopping']
 const SLICE_OPTIONS = Array.from({ length: MAX_SLICES }, (_, i) => i + 1)
 
-// guarda o tipo do erro (não o texto) para o idioma valer mesmo depois de trocar
-type ErrorState = { kind: 'load' } | { kind: 'stop'; message?: string } | null
 
 export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActive?: boolean }) {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<ErrorState>(null)
+  // falha ao carregar (texto vem do locale, então troca junto com o idioma); erro ao parar vai para o toast,
+  // senão o load() logo em seguida apagaria a mensagem
+  const [loadError, setLoadError] = useState<'network' | 'load' | null>(null)
+  const toast = useToast()
   const [stopping, setStopping] = useState(false)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
   const [page, setPage] = useState(1)
@@ -57,9 +59,9 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
   async function load() {
     try {
       setRuns(await listRuns())
-      setError(null)
-    } catch {
-      setError({ kind: 'load' })
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(err instanceof ApiError && err.code === 'network_error' ? 'network' : 'load')
     } finally {
       setLoading(false)
     }
@@ -90,7 +92,7 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
       await stopEnvironment()
       await load()
     } catch(err) {
-      setError({ kind: 'stop', message: err instanceof Error ? err.message : undefined })
+      toast.error(err instanceof Error ? err.message : t('ambientes.stopError'))
       await load()
     } finally {
       setStopping(false)
@@ -213,9 +215,9 @@ export default function PesquisadorAmbientes({ onlyActive = false }: { onlyActiv
         </div>
       )}
 
-      {error && (
-        <p className="text-sm text-destructive">
-          {error.kind === 'load' ? t('ambientes.loadError') : error.message ?? t('ambientes.stopError')}
+      {loadError && (
+        <p role="alert" className="text-sm text-destructive">
+          {loadError === 'network' ? t('errors.network_error') : t('ambientes.loadError')}
         </p>
       )}
 

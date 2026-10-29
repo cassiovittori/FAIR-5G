@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import { AuthProvider } from '@/lib/auth'
+import { ToastProvider } from '@/components/Toaster'
 import { ThemeProvider } from '@/lib/theme'
 import { BootstrapProvider } from './lib/bootstrap-context.tsx'
 import './index.css'
@@ -14,11 +15,13 @@ const router = createBrowserRouter([
   {
     path: '*',
     element: (
-      <AuthProvider>
-        <BootstrapProvider>
-          <App />
-        </BootstrapProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BootstrapProvider>
+            <App />
+          </BootstrapProvider>
+        </AuthProvider>
+      </ToastProvider>
     ),
   },
 ])

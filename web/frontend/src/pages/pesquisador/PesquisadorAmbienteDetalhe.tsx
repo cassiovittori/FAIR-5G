@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusDot } from '@/components/StatusDot'
-import { getRun, streamLogs, type Run } from '@/lib/api'
+import { ApiError, getRun, streamLogs, type Run } from '@/lib/api'
 import { SaveTemplateDialog } from '@/components/SaveTemplateDialog'
 import { configFieldLabel, configFieldValue, environmentLabel, fmtDateTime, fmtDuration, stripAnsi } from '@/lib/runs'
 
@@ -17,6 +17,8 @@ export default function PesquisadorAmbienteDetalhe() {
   const { runId } = useParams()
   const [run, setRun] = useState<Run | null>(null)
   const [loading, setLoading] = useState(true)
+  // null = não encontrado (404); texto = outra falha (rede, sessão...), que não é "não existe"
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [lines, setLines] = useState<string[]>([])
   const logRef = useRef<HTMLPreElement>(null)
 
@@ -24,8 +26,11 @@ export default function PesquisadorAmbienteDetalhe() {
     if (!runId) return
     try {
       setRun(await getRun(runId))
-    } catch {
-      if (initial) setRun(null) // no polling, falha pontual não apaga a tela
+      setLoadError(null)
+    } catch (err) {
+      if (!initial) return // no polling, falha pontual não apaga a tela
+      setRun(null)
+      setLoadError(err instanceof ApiError && err.status === 404 ? null : err instanceof Error ? err.message : t('common.unknownError'))
     } finally {
       setLoading(false)
     }
@@ -75,7 +80,9 @@ export default function PesquisadorAmbienteDetalhe() {
         <Button asChild variant="ghost" size="sm">
           <Link to="/pesquisador/ambientes"><ArrowLeft className="mr-1 h-4 w-4" />{t('common.back')}</Link>
         </Button>
-        <p className="text-sm text-muted-foreground">{t('detalhe.notFound')}</p>
+        {loadError
+          ? <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          : <p className="text-sm text-muted-foreground">{t('detalhe.notFound')}</p>}
       </div>
     )
   }
