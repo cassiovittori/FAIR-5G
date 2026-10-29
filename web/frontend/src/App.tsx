@@ -14,6 +14,7 @@ import PesquisadorNovoAmbiente from './pages/pesquisador/PesquisadorNovoAmbiente
 import PesquisadorMonitoramento from './pages/pesquisador/PesquisadorMonitoramento'
 import PesquisadorAmbientes from './pages/pesquisador/PesquisadorAmbientes'
 import PesquisadorAmbienteDetalhe from './pages/pesquisador/PesquisadorAmbienteDetalhe'
+import PesquisadorModelos from './pages/pesquisador/PesquisadorModelos'
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
               <Route path="/pesquisador/ambientes" element={<PesquisadorAmbientes />} />
               <Route path="/pesquisador/ambientes-ativos" element={<PesquisadorAmbientes onlyActive />} />
               <Route path="/pesquisador/ambientes/:runId" element={<PesquisadorAmbienteDetalhe />} /> 
+              <Route path="/pesquisador/modelos" element={<PesquisadorModelos />} />
             </Route>
             <Route path="/tutorial" element={<Trilha />} />
           </Route>

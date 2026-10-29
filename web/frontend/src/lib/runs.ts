@@ -8,6 +8,31 @@ export function environmentLabel(run: Run) {
   return i18n.t('environment.defaultName', { count: run.slice_count })
 }
 
+// formatação do config salvo (detalhe do ambiente e lista de templates/rascunhos)
+export function configFieldLabel(key: string) {
+  if (key === 'ues_per_slice') return i18n.t('detalhe.uesPerSlice')
+  const campo = CAMPOS.find((c) => c.nome === key)
+  return campo ? i18n.t(campo.labelKey) : key
+}
+
+const allSame = (value: unknown[]) => value.length > 0 && value.every((v) => v === value[0])
+
+export function configFieldValue(key: string, value: unknown) {
+  if (!Array.isArray(value)) return String(value)
+  if (key === 'ues_per_slice' && allSame(value)) return i18n.t('detalhe.uesAllSame', { count: Number(value[0]) })
+  return value.join(', ')
+}
+
+// resumo de uma linha: "2 fatias · 3, 1 UEs por fatia"
+export function configSummary(config: Record<string, unknown>) {
+  const parts = [i18n.t('common.sliceCount', { count: Number(config.slices) })]
+  const ues = config.ues_per_slice
+  if (Array.isArray(ues) && ues.length) {
+    parts.push(allSame(ues) ? configFieldValue('ues_per_slice', ues) : i18n.t('detalhe.uesList', { list: ues.join(', ') }))
+  }
+  return parts.join(' · ')
+}
+
 // o SQLite pode devolver datetime sem timezone; assume UTC
 export function parseDate(iso: string) {
   return new Date(/([zZ]|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso + 'Z')

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link, Outlet, useLocation } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronLeft, LayoutGrid, Boxes, Activity, BookOpen } from "lucide-react"
+import { ChevronDown, ChevronLeft, LayoutGrid, Boxes, Activity, BookOpen, LayoutTemplate } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -20,6 +20,7 @@ export default function PesquisadorShell() {
   const inMenu = pathname === "/pesquisador"
   const inAmbientes = pathname.startsWith("/pesquisador/ambientes") // inclui ambientes-ativos e /ambientes/:runId
   const inMonitoramento = pathname === "/pesquisador/monitoramento"
+  const inModelos = pathname === "/pesquisador/modelos"
 
   // "Todos os Ambientes" também vale para o detalhe de um run
   const isSubActive = (to: string) =>
@@ -104,6 +105,18 @@ export default function PesquisadorShell() {
                 >
                   <Activity className={`h-4 w-4 ${inMonitoramento ? "text-[#F5A623]" : ""}`} />
                   {t("sidebar.monitoring")}
+                </Link>
+
+                <Link
+                  to="/pesquisador/modelos"
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                    inModelos
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <LayoutTemplate className={`h-4 w-4 ${inModelos ? "text-[#0633FF]" : ""}`} />
+                  {t("sidebar.templates")}
                 </Link>
               </div>
             </div>

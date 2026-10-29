@@ -10,7 +10,8 @@ import psutil
 from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
-from fastapi.responses import StreamingResponse
+from typing import Literal
+from fastapi.responses import StreamingResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -22,6 +23,7 @@ from auth import hash_password, verify_password, create_access_token, decode_acc
 from users_store import create_user, get_user_by_email, any_admin_exists
 from db import create_db_and_tables, get_session, engine
 from runs_store import create_run, update_run, get_run, get_active_run, list_runs, get_busy_run
+from presets_store import create_preset, get_preset, list_presets, count_presets, update_preset, delete_preset
 from network_metrics import collect_network_metrics, collect_network_history, collect_nfs, HISTORY, REPO_ROOT
 from pydantic import BaseModel, Field
 
@@ -53,6 +55,18 @@ def _validate_ues_per_slice(raw, slice_count: int) -> list[int]:
         sys.path.insert(0, REPO_ROOT)
     from fair5gctl.core.slicing import validate_ues_per_slice
     return validate_ues_per_slice(raw, slice_count)
+
+
+def validate_up_config(slices, ues_per_slice) -> dict:
+    """Valida e normaliza o que vira flag do up (sem `nome`). Usado pelo /up e pelos presets,
+    então template/rascunho só guardam config que o /up aceitaria. Levanta HTTPException 422."""
+    if isinstance(slices, bool) or not isinstance(slices, int) or not 1 <= slices <= 8:
+        raise HTTPException(status_code=422, detail="slices deve ser um inteiro entre 1 e 8")
+    try:
+        ues = _validate_ues_per_slice(ues_per_slice, slices)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"slices": slices, "ues_per_slice": ues}
 
 
 
@@ -298,16 +312,12 @@ def start_testbed(
         # 423 e não 409: o front trata 409 como "ambiente em uso" e oferece "Parar"
         raise HTTPException(status_code=423, detail="Há uma limpeza em andamento. Aguarde terminar.")
 
-    try:
-        ues_per_slice = _validate_ues_per_slice(body.ues_per_slice, body.slices)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    # nome já tem coluna própria; o config guarda só o que vira flag do up
+    config = validate_up_config(body.slices, body.ues_per_slice)
 
     run_id = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     log_path = os.path.join(REPO_ROOT, "runs", run_id, "up.log")
     nome = (body.nome or "").strip() or None
-    # nome já tem coluna própria; o config guarda só o que vira flag do up
-    config = {**body.model_dump(exclude={"nome"}), "ues_per_slice": ues_per_slice}
 
     create_run(
         session,
@@ -350,6 +360,99 @@ def run_detail(
     if run is None:
         raise HTTPException(status_code=404, detail="run não encontrado")
     return run
+
+
+# Presets: templates e rascunhos do formulário de criação ---------------------------------
+PRESETS_LIMIT = 50  # por usuário e por tipo
+
+
+class PresetCreate(BaseModel):
+    tipo: Literal["template", "rascunho"]
+    nome: str | None = Field(None, max_length=60)
+    descricao: str | None = Field(None, max_length=200)
+    config: dict
+
+
+class PresetUpdate(BaseModel):
+    nome: str | None = Field(None, max_length=60)
+    descricao: str | None = Field(None, max_length=200)
+    config: dict | None = None
+
+
+def _preset_fields(tipo: str, nome: str | None, descricao: str | None) -> dict:
+    """Normaliza nome/descrição: template exige nome; rascunho não tem descrição."""
+    nome = (nome or "").strip() or None
+    if tipo == "template" and nome is None:
+        raise HTTPException(status_code=422, detail="template precisa de um nome")
+    descricao = ((descricao or "").strip() or None) if tipo == "template" else None
+    return {"nome": nome, "descricao": descricao}
+
+
+def _preset_or_404(session: Session, preset_id: int, user_id: int):
+    preset = get_preset(session, preset_id, user_id=user_id)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="preset não encontrado")
+    return preset
+
+
+@app.get("/presets")
+def presets_list(
+    tipo: Literal["template", "rascunho"] | None = None,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return list_presets(session, user_id=current_user.id, tipo=tipo)
+
+
+@app.post("/presets", status_code=201)
+def preset_create(
+    body: PresetCreate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    fields = _preset_fields(body.tipo, body.nome, body.descricao)
+    config = validate_up_config(body.config.get("slices"), body.config.get("ues_per_slice"))
+    if count_presets(session, user_id=current_user.id, tipo=body.tipo) >= PRESETS_LIMIT:
+        raise HTTPException(status_code=422, detail=f"limite de {PRESETS_LIMIT} itens deste tipo atingido; exclua algum antes")
+    return create_preset(session, tipo=body.tipo, config=config, user_id=current_user.id, **fields)
+
+
+@app.get("/presets/{preset_id}")
+def preset_detail(
+    preset_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    return _preset_or_404(session, preset_id, current_user.id)
+
+
+@app.put("/presets/{preset_id}")
+def preset_update(
+    preset_id: int,
+    body: PresetUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    preset = _preset_or_404(session, preset_id, current_user.id)
+    sent = body.model_dump(exclude_unset=True)  # parcial: só o que veio no body
+    fields = _preset_fields(
+        preset.tipo,
+        sent["nome"] if "nome" in sent else preset.nome,
+        sent["descricao"] if "descricao" in sent else preset.descricao,
+    )
+    if sent.get("config") is not None:
+        fields["config"] = validate_up_config(body.config.get("slices"), body.config.get("ues_per_slice"))
+    return update_preset(session, preset, **fields)
+
+
+@app.delete("/presets/{preset_id}", status_code=204)
+def preset_delete(
+    preset_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    delete_preset(session, _preset_or_404(session, preset_id, current_user.id))
+    return Response(status_code=204)
 
 
 async def tail_log(log_path: str):

@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusDot } from '@/components/StatusDot'
 import { getRun, streamLogs, type Run } from '@/lib/api'
-import { CAMPOS } from '@/lib/up-fields'
-import { environmentLabel, fmtDateTime, fmtDuration, stripAnsi } from '@/lib/runs'
+import { SaveTemplateDialog } from '@/components/SaveTemplateDialog'
+import { configFieldLabel, configFieldValue, environmentLabel, fmtDateTime, fmtDuration, stripAnsi } from '@/lib/runs'
 
 const MAX_LOG_LINES = 500
 
@@ -82,18 +82,6 @@ export default function PesquisadorAmbienteDetalhe() {
 
   // runs antigos não têm config salvo: cai no slice_count
   const config = run.config ?? { slices: run.slice_count }
-  const fieldLabel = (key: string) => {
-    if (key === 'ues_per_slice') return t('detalhe.uesPerSlice')
-    const campo = CAMPOS.find((c) => c.nome === key)
-    return campo ? t(campo.labelKey) : key
-  }
-  const fieldValue = (key: string, value: unknown) => {
-    if (!Array.isArray(value)) return String(value)
-    if (key === 'ues_per_slice' && value.length > 0 && value.every((v) => v === value[0])) {
-      return t('detalhe.uesAllSame', { count: Number(value[0]) })
-    }
-    return value.join(', ')
-  }
   // runs antigos (sem ues_per_slice) subiram com o padrão do upstream: 1 UE por fatia
   const ues = Array.isArray(config.ues_per_slice) ? config.ues_per_slice.map(Number) : Array<number>(run.slice_count).fill(1)
   const totalUes = ues.reduce((a, b) => a + b, 0)
@@ -126,6 +114,8 @@ export default function PesquisadorAmbienteDetalhe() {
               <Link to="/pesquisador/monitoramento">{t('common.monitor')}</Link>
             </Button>
           )}
+          {/* runs antigos sem ues_per_slice: o backend completa com o padrão ao validar */}
+          <SaveTemplateDialog getConfig={() => config} defaultName={run.nome ?? ''} />
           <Button asChild>
             <Link to={`/pesquisador/novo?from=${run.run_id}`}>{t('common.duplicate')}</Link>
           </Button>
@@ -148,8 +138,8 @@ export default function PesquisadorAmbienteDetalhe() {
             .filter(([key, value]) => key !== 'nome' && value != null)
             .map(([key, value]) => (
               <div key={key} className="flex items-center justify-between px-6 py-3 text-sm">
-                <span>{fieldLabel(key)}</span>
-                <span className="font-mono">{fieldValue(key, value)}</span>
+                <span>{configFieldLabel(key)}</span>
+                <span className="font-mono">{configFieldValue(key, value)}</span>
               </div>
             ))}
           <div className="flex items-center justify-between px-6 py-3 text-sm">

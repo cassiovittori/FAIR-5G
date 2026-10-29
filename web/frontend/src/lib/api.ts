@@ -37,16 +37,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error(detailMessage(detail) ?? i18n.t("common.httpError", { status: res.status }))
+    throw new ApiError(detailMessage(detail) ?? i18n.t("common.httpError", { status: res.status }), res.status)
   }
 
-  return res.json()
+  // 204 (DELETE) não tem corpo
+  return res.status === 204 ? (undefined as T) : res.json()
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  delete: <T = void>(path: string) => request<T>(path, { method: "DELETE" }),
 }
 
 // Login ---------------------------------
@@ -286,3 +289,32 @@ export type NetworkNfs =
   | { available: true; nfs: NfStatus[] }
 
 export const networkNfs = () => api.get<NetworkNfs>("/metrics/network/nfs")
+
+// Presets: templates (config nomeada, reutilizável) e rascunhos (form salvo pela metade) ---------------------------------
+export type PresetTipo = "template" | "rascunho"
+
+export interface Preset {
+  id: number
+  tipo: PresetTipo
+  nome: string | null           // sempre preenchido em template; rascunho pode não ter
+  descricao: string | null
+  config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface PresetCreate {
+  tipo: PresetTipo
+  nome?: string | null
+  descricao?: string | null
+  config: Record<string, unknown>
+}
+
+// `tipo` não muda depois de criado
+export type PresetUpdate = Partial<Pick<PresetCreate, "nome" | "descricao" | "config">>
+
+export const listPresets = (tipo?: PresetTipo) => api.get<Preset[]>(tipo ? `/presets?tipo=${tipo}` : "/presets")
+export const getPreset = (id: number | string) => api.get<Preset>(`/presets/${id}`)
+export const createPreset = (body: PresetCreate) => api.post<Preset>("/presets", body)
+export const updatePreset = (id: number, body: PresetUpdate) => api.put<Preset>(`/presets/${id}`, body)
+export const deletePreset = (id: number) => api.delete(`/presets/${id}`)
