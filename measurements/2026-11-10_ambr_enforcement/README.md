@@ -59,7 +59,43 @@ O gNB recebe ~32 Mbps da UPF e entrega ~11 Mbps ao UE. O descarte acontece **den
 
 ## DEPOIS — meter OVS desligado por padrão (branch `fix/41-ovs-meter-optional`)
 
-> A preencher com o teste da correção: `./fair5g up` (sem `--ovs-meters`), o verify mostrando "OVS meters off", e a fatia 2 limitada a ~10 Mbps sem RLF.
+Testado na VM em 10/11/2026, no commit `da4380a`.
+
+### Padrão: `./fair5g up` (meters desligados)
+
+Com o ambiente de pé, o switch não tem nenhum meter:
+
+```
+$ sudo ovs-ofctl -O OpenFlow13 dump-meters s1 | grep -c rate=
+0
+```
+
+Downlink da fatia 2, TCP, 60 s (duas execuções):
+
+```
+[  5]   0.00-60.12  sec  70.6 MBytes  9.85 Mbits/sec  3997             sender
+[  5]   0.00-60.08  sec  70.1 MBytes  9.79 Mbits/sec                  receiver
+
+[  5]   0.00-60.11  sec  70.6 MBytes  9.86 Mbits/sec  4128             sender
+[  5]   0.00-60.07  sec  70.1 MBytes  9.79 Mbits/sec                  receiver
+```
+
+- A fatia continua limitada ao AMBR (~9,8 Mbps, igual ao bypass do "antes"). Agora quem limita é só o gNB.
+- As retransmissões vêm do descarte do token bucket do gNB, o comportamento normal de um policer.
+- Não houve queda de rádio. Um RLF interrompe o tráfego para sempre (no piloto, o ue2 não voltou), e as duas execuções entregaram 70,1 MB em 60 s, a média cheia. O acompanhamento com `tail -f` do log do ue2 não estava ativo durante o teste: o comando voltou ao prompt na hora. Por isso a evidência é a vazão, não o log.
+
+### Com `./fair5g up --ovs-meters`
+
+O verify passa com `[OK  ] OVS meters: 4 distinct meter(s) installed (2 per slice)`, e `ovs-ofctl dump-meters s1` mostra os 4 meters, cada um com o AMBR do seu sentido:
+
+```
+rate=10000
+rate=100000
+rate=50000
+rate=10000
+```
+
+Antes da correção havia 2 meters (100000 e 10000), e o uplink da fatia 1 era limitado a 100 Mbps em vez de 50.
 
 ## Arquivos brutos
 
