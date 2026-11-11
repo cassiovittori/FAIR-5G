@@ -300,20 +300,26 @@ def run_background_logged(cmd, log_path: Path, cwd=None, env=None):
     Mantendo a mesma sessao e apenas um grupo de processos proprio (setpgrp), o
     ticket continua valido e o processo sobrevive ao termino do CLI.
 
+    WHY NO `script` AND NO TERMINAL ON STDIN (#19):
+    setpgrp puts the child in a BACKGROUND process group of the same terminal.
+    The kernel stops (SIGTTOU/SIGTTIN, state T) any background process that
+    changes the terminal's mode or reads from it. `script` does exactly that as
+    its first step — it switches stdin to raw mode — so the whole bring-up froze
+    before writing a single byte: no up.log, an empty up.stdout.log, and a
+    caller polling a process that was neither running nor dead. The child gets
+    /dev/null as stdin and writes straight to the log, so nothing in it ever
+    touches the terminal.
+
     Retorna o objeto Popen para que o chamador detecte falha precoce.
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    if subprocess.call("command -v script >/dev/null 2>&1", shell=True) != 0:
-        print("[ERRO] comando 'script' nao encontrado. Instale: sudo apt-get install -y util-linux")
-        raise SystemExit(1)
-
-    script_cmd = f"script -q -f {str(log_path)} -c {repr(cmd)}"
-    saida = open(log_path.parent / "up.stdout.log", "ab")
+    saida = open(log_path, "ab")
     return subprocess.Popen(
-        script_cmd,
+        cmd,
         cwd=str(cwd) if cwd else None,
         env=env,
         shell=True,
+        stdin=subprocess.DEVNULL,
         stdout=saida,
         stderr=subprocess.STDOUT,
         preexec_fn=os.setpgrp,

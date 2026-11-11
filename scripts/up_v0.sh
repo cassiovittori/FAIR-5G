@@ -95,9 +95,14 @@ export FAIR5G_CONFIG_DIR="$REPO_ROOT/configs/runtime"
 echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 # sudo drops the caller's environment: every variable auto_sdn.py reads must be
 # passed explicitly here, or it silently falls back to its default.
+# FAIR5G_DETACH and FAIR5G_CLI_SCRIPT were missing (#19): `up --detach` set
+# FAIR5G_DETACH, sudo dropped it, auto_sdn.py opened the interactive CLI instead
+# of writing the pid file, and the caller waited for a pid that never came.
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
   FAIR5G_UES_PER_SLICE="${FAIR5G_UES_PER_SLICE:-}" \
+  FAIR5G_DETACH="${FAIR5G_DETACH:-}" \
+  FAIR5G_CLI_SCRIPT="${FAIR5G_CLI_SCRIPT:-}" \
   FAIR5G_OVS_METERS="${FAIR5G_OVS_METERS:-0}" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"
