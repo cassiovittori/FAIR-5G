@@ -6,11 +6,16 @@ A round, in order:
   1. down               clean slate, whatever the previous round left behind
   2. up                 scripts/up_v0.sh in detached mode (FAIR5G_DETACH=1)
   3. verify             scripts/verify_up.py in strict mode
-  4. session check      one tunnel per UE, tunnel addresses where expected
+  4. session check      one tunnel per UE, tunnel addresses where expected;
+                        OVS meters on the switch as requested (off by default)
   5. settle   (60 s)    let registration traffic and caches calm down
   6. idle     (120 s)   ping through each UE's tunnel, no load
   7. per_slice          each slice alone: iperf3 uplink 30 s, then downlink 30 s
+                        (plus 2 s discarded at the start of each test, -O)
   8. concurrent         every slice at once, uplink then downlink, ping in parallel
+
+After every batch the UEs' logs are checked for a radio link failure; if one
+happened the round stops there, INVALID with radio_link_failure:<ue>.
   9. collect            M4 counters, OVS flows/meters, ONOS meters, logs, images
  10. down               always, even after a failure or Ctrl-C
 
@@ -72,7 +77,14 @@ PROTOCOL = {
     "settle_s": 60,
     "idle_s": 120,
     "iperf_duration_s": 30,
+    # The gNB's AMBR token bucket starts full with one second of credit, so the
+    # first second of every test runs at ~1.5-2x the AMBR (#41). iperf3 -O
+    # discards those seconds; the measured window stays iperf_duration_s.
+    "iperf_omit_s": 2,
     "ping_interval_s": 0.2,
+    # OVS meters off: the AMBR is enforced by the gNB only (#41). Rounds with the
+    # meters on are ablation rounds and must not mix with the baseline.
+    "ovs_meters": False,
 }
 
 PID_FILE = REPO_ROOT / ".fair5g_topology.pid"
@@ -289,7 +301,8 @@ class Round:
         self.tunnel_ips = {}   # ue name -> tunnel address
         conformant = {
             "settle_s": args.settle, "idle_s": args.idle,
-            "iperf_duration_s": args.duration, "ping_interval_s": args.ping_interval,
+            "iperf_duration_s": args.duration, "iperf_omit_s": args.omit,
+            "ping_interval_s": args.ping_interval, "ovs_meters": args.ovs_meters,
         } == PROTOCOL
         self.manifest = {
             "schema_version": SCHEMA_VERSION,
@@ -307,7 +320,9 @@ class Round:
                 "settle_s": args.settle,
                 "idle_s": args.idle,
                 "iperf_duration_s": args.duration,
+                "iperf_omit_s": args.omit,
                 "iperf_protocol": "tcp",
+                "ovs_meters": args.ovs_meters,
                 "ping_interval_s": args.ping_interval,
                 "gap_s": GAP_S,
                 "stall_min_zero_intervals": STALL_MIN_ZERO_INTERVALS,
@@ -464,6 +479,9 @@ def preflight(args) -> dict:
     env.pop("FAIR5G_UES_PER_SLICE", None)
     if args.ues_per_slice:
         env["FAIR5G_UES_PER_SLICE"] = args.ues_per_slice
+    # Always explicit, never inherited: a FAIR5G_OVS_METERS left in the shell
+    # must not change what the round measures behind the manifest's back.
+    env["FAIR5G_OVS_METERS"] = "1" if args.ovs_meters else "0"
 
     # render_slice_configs.py needs jinja2. bootstrap_ubuntu.sh installs it with
     # `pip --user`, which root's python3 does not see. Borrow the invoking
@@ -598,6 +616,57 @@ def check_sessions(rnd: Round) -> None:
         raise RoundInvalid("pdu_session_count" if bad_count else "tunnel_ip_shift")
 
 
+def check_ovs_meters(rnd: Round) -> None:
+    """The meters on the switch match what the round asked for (#41).
+
+    Read from the switch, not from ONOS: the switch is what enforces. A
+    mismatch (for example a checkout without #41, which always installs
+    meters) would put an ablation round in the baseline or vice versa.
+    """
+    out = rnd.run(["ovs-ofctl", "-O", "OpenFlow13", "dump-meters", "s1"],
+                  out="ovs_meters_at_start.txt").stdout
+    rates = sorted(int(r) for r in re.findall(r"rate=(\d+)", out))
+    want = rnd.args.ovs_meters
+    ok = bool(rates) == want
+    rnd.manifest["checks"]["ovs_meters"] = {"ok": ok, "requested": want,
+                                            "switch_rates_kbps": rates}
+    rnd.save_manifest()
+    if not ok:
+        rnd.log(f"  OVS meters: requested={'on' if want else 'off'}, switch has {rates or 'none'}")
+        raise RoundInvalid("ovs_meters_mismatch")
+
+
+RLF_RE = re.compile(r"radio link failure|signal lost", re.I)
+
+
+def check_radio(rnd: Round, after: str) -> None:
+    """Stop the round if any UE lost its (simulated) radio link.
+
+    UERANSIM's UE drops the cell after 2 s without a heartbeat answer and never
+    reattaches (#41). Every later test of that UE would fail for that reason
+    alone, so the round stops here, with the cause named, instead of piling up
+    iperf_error entries that hide it. Runs after each batch, outside the phase
+    timing.
+    """
+    radio = rnd.manifest["checks"].setdefault("radio", {"ok": True, "events": {}})
+    lost = []
+    for spec in rnd.specs:
+        for ue in spec.ues:
+            out = rnd.run(["docker", "exec", ue.container, "sh", "-c",
+                           f"grep -iE 'radio link failure|signal lost' /tmp/{ue.name}.log; true"]).stdout
+            hits = [line for line in out.splitlines() if RLF_RE.search(line)]
+            if hits and ue.name not in radio["events"]:
+                radio["events"][ue.name] = {"detected_after": after, "lines": hits[:5]}
+                lost.append(ue.name)
+    if lost:
+        radio["ok"] = False
+        rnd.save_manifest()
+        for name in lost:
+            rnd.log(f"  radio link lost: {name} (after {after})")
+        raise RoundInvalid(f"radio_link_failure:{','.join(lost)}")
+    rnd.save_manifest()
+
+
 def record_images(rnd: Round) -> None:
     names = rnd.run(["docker", "ps", "--format", "{{.Names}}"]).stdout.split()
     if not names:
@@ -674,24 +743,28 @@ def run_iperf_batch(rnd: Round, phase: str, specs, direction: str, with_ping: bo
     The caller restarts the iperf3 servers BEFORE opening the phase, so the
     restart does not count in the phase's pressure and steal figures.
     """
-    dur = rnd.args.duration
+    dur, omit = rnd.args.duration, rnd.args.omit
     procs, meta = [], []
     for spec in specs:
         for k, ue in enumerate(spec.ues):
             tun = rnd.tunnel_ips[ue.name]
             out = f"{phase}_{direction}_{ue.name}.json"
+            # -O: iperf3 runs omit + dur seconds and reports only the last dur;
+            # the omitted intervals are flagged in the JSON and skipped by
+            # summarize_iperf.
             cmd = ["docker", "exec", ue.container, "iperf3", "-c", spec.upf_gateway,
-                   "-p", str(IPERF_BASE_PORT + k), "-B", tun, "-t", str(dur), "-i", "1",
-                   "-J", "--connect-timeout", "5000"]
+                   "-p", str(IPERF_BASE_PORT + k), "-B", tun, "-t", str(dur),
+                   "-O", str(omit), "-i", "1", "-J", "--connect-timeout", "5000"]
             if direction == "down":
                 cmd.append("-R")
             procs.append(rnd.spawn(cmd, out))
             meta.append(("iperf3", spec, ue, out))
             if with_ping:
+                # The ping spans the whole test, omitted seconds included.
                 pout = f"{phase}_{direction}_{ue.name}_ping.txt"
-                procs.append(rnd.spawn(ping_cmd(rnd, ue, spec.upf_gateway, dur), pout))
+                procs.append(rnd.spawn(ping_cmd(rnd, ue, spec.upf_gateway, dur + omit), pout))
                 meta.append(("ping", spec, ue, pout))
-    wait_all(procs, dur + 60)
+    wait_all(procs, dur + omit + 60)
 
     for kind, spec, ue, out in meta:
         if kind == "ping":
@@ -812,8 +885,14 @@ def parse_args():
     p.add_argument("--idle", type=int, default=PROTOCOL["idle_s"], help="seconds")
     p.add_argument("--duration", type=int, default=PROTOCOL["iperf_duration_s"],
                    help="iperf3 seconds per test")
+    p.add_argument("--omit", type=int, default=PROTOCOL["iperf_omit_s"],
+                   help="iperf3 seconds discarded at the start of each test (-O)")
     p.add_argument("--ping-interval", type=float, default=PROTOCOL["ping_interval_s"])
+    p.add_argument("--ovs-meters", action="store_true",
+                   help="also install the OVS slice meters (ablation; off in the protocol)")
     args = p.parse_args()
+    if args.omit < 0:
+        p.error("--omit must be >= 0")
     if not CAMPAIGN_NAME_RE.match(args.campaign):
         # Starting with a letter also keeps campaigns apart from the
         # timestamped run ids that `./fair5g up` creates under runs/.
@@ -869,12 +948,15 @@ def main() -> int:
             with rnd.phase("verify"):
                 run_verify(rnd, up_env)
                 check_sessions(rnd)
+                check_ovs_meters(rnd)
+                check_radio(rnd, "verify")
                 record_images(rnd)
             with rnd.phase("settle"):
                 time.sleep(args.settle)
             docker_stats(rnd, "docker_stats_idle_start.jsonl")
             with rnd.phase("idle"):
                 run_idle(rnd)
+            check_radio(rnd, "idle")
             docker_stats(rnd, "docker_stats_idle_end.jsonl")
             for spec in specs:
                 for direction in ("up", "down"):
@@ -883,11 +965,13 @@ def main() -> int:
                     with rnd.phase(f"per_slice_s{spec.index}_{direction}"):
                         run_iperf_batch(rnd, f"slice{spec.index}", [spec], direction,
                                         with_ping=False)
+                    check_radio(rnd, f"per_slice_s{spec.index}_{direction}")
             for direction in ("up", "down"):
                 restart_iperf_servers(rnd, specs)
                 time.sleep(GAP_S)
                 with rnd.phase(f"concurrent_{direction}"):
                     run_iperf_batch(rnd, "concurrent", specs, direction, with_ping=True)
+                check_radio(rnd, f"concurrent_{direction}")
         except RoundInvalid as e:
             rnd.invalidate(str(e))
         finally:
