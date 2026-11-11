@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 DEFAULT_SLICE_COUNT = 2
@@ -18,49 +19,24 @@ MIN_UES_PER_SLICE = 1
 # limit, not a technical restriction of Open5GS.
 MAX_UES_PER_SLICE = 4
 
-# Profiles calibrated from the measured capacity of the emulated environment.
+# Slice QoS profiles. The AMBR values go into the subscriber profile
+# (configs/templates/subscribers.js.j2) and from there to the RAN over NGAP.
 #
-# ENVIRONMENT CEILING: 8.3 Mbps on a single slice's user plane.
+# WHO ENFORCES THE AMBR (#41). UERANSIM's gNB does: its GTP task runs a
+# token-bucket RateLimiter fed with the AMBR values Open5GS sends over NGAP, and
+# silently drops what exceeds them — downlink before the simulated radio,
+# uplink after it. The Open5GS v2.7.5 UPF stores the QER it receives over PFCP
+# but applies no rate limit on the packet path. Measured on 2026-11-10 with the
+# OVS meter bypassed: UDP offered at 30 Mbps on the 10 Mbps slice delivered
+# 10.3 Mbps, and the gNB received 32 Mbps from the UPF while sending 11 Mbps to
+# the UE (measurements/2026-11-10_ambr_enforcement/).
 #
-# Measured on 2026-09-23 with the slice meters fully bypassed
-# (scripts/experiments/bypass_meters.py clones the production flows at priority
-# 600 without the METER instruction, covering uplink AND downlink). The control
-# was verified on the switch itself, not from the tool's own message:
-#   - 31,029 packets through the meterless flow against 26 through the metered
-#     one;
-#   - meter band counters at zero (no drops during the test);
-#   - iperf3/TCP delivered 8.13 and 8.26 Mbps, ABOVE the 8000 kbps meter.
-# Saturation confirmed with UDP: offering 20 Mbps delivers 8.33 Mbps; offering
-# 40 Mbps delivers 8.34 Mbps. Doubling the load does not move what arrives —
-# a hard ceiling.
-#
-# WHERE THE BOTTLENECK IS: UERANSIM's user plane, not the SDN layer. In the same
-# test the OpenFlow switch received and forwarded the 42.7 Mbps offered with
-# drop=0 and errs=0 on every port, while the emulated gNB relayed ~20% of what
-# it received, with no socket errors (RcvbufErrors=0) and at ~10% of one core.
-# It is not a CPU limit: adding vCPUs to the VM does not move the ceiling.
-#
-# HISTORICAL NOTE: an earlier measurement (2026-09-10) recorded a 12.7 Mbps
-# ceiling and was the basis for the 8/3 profiles. That value does NOT reproduce
-# and has been discarded. The control back then diverted only the uplink out of
-# the meters, leaving the downlink metered — the measurement was never free of
-# enforcement.
-#
-# SELECTION CRITERION: the sum of every slice's AMBR should stay around two
-# thirds of the measured ceiling. That way, when all slices saturate, each one
-# receives its own AMBR and the observed distribution is ATTRIBUTABLE to the
-# meters. If the sum exceeded the ceiling, slices would compete for the
-# emulator's bottleneck, which would resolve the contention on its own — and
-# there would be no way to separate the effect of the policy from the effect of
-# the environment.
-#
-# With 2 / 1 Mbps: 2 slices sum to 3 Mbps (36% of the ceiling); 4 slices, the
-# maximum the tutorial covers, sum to 6 Mbps (72%). A single set of profiles
-# serves every scenario, with no recalibration as a function of N.
-#
-# The contrast that supports the isolation claim is between these profiles and
-# the control run with NO meters, in which one slice consumes the whole ceiling
-# and starves the others.
+# HISTORICAL NOTE. The "environment ceilings" recorded on 2026-09-10 (12.7 Mbps)
+# and 2026-09-23 (8.3 Mbps) were this limiter: the bypass removed only the OVS
+# meter, and every "ceiling" was the configured profile reflected back
+# (2->2.05, 8->8.3, 12->12.7, 100->103, 500->512 Mbps; see commit 93fa7c3). A
+# run "with no meters" is therefore NOT a run with no AMBR: a control without
+# enforcement needs the AMBR itself raised in the subscriber profile.
 QOS_PROFILES = [
     {"index": 9, "ambr_down_mbps": 100, "ambr_up_mbps": 50},   # eMBB-like profile
     {"index": 2, "ambr_down_mbps": 10, "ambr_up_mbps": 10},   # URLLC-like profile
@@ -193,11 +169,13 @@ def build_slice_specs(count, ues_per_slice=None) -> list[SliceSpec]:
 
     Bandwidth limit
     ---------------
-    Every UE in a slice shares the SAME meter, so the profile's AMBR is
-    AGGREGATE per slice, not per UE. This follows 3GPP Session-AMBR semantics
-    (the limit belongs to the slice) and is what enables the scenario where an
-    abusive UE consumes the bandwidth of the others in its own slice — the
-    intra-slice case that matters for the threat model.
+    By default the profile's AMBR is enforced by the gNB, PER UE / PDU session
+    (3GPP Session-AMBR semantics): with several UEs in a slice, each one gets
+    the full AMBR. With FAIR5G_OVS_METERS=1 the OVS meters are added on the
+    access link, and every UE in a slice shares the SAME pair of meters (one per
+    direction), so the limit becomes AGGREGATE per slice — the intra-slice case
+    where an abusive UE consumes the bandwidth of the others in its own slice.
+    See ovs_meters_enabled() for why that is not the default.
     """
     count = validate_slice_count(count)
     per_slice = validate_ues_per_slice(ues_per_slice, count)
@@ -248,10 +226,26 @@ def other_subnets(specs: list[SliceSpec], index: int) -> list[str]:
     return [s.upf_subnet for s in specs if s.index != index]
 
 
-def meter_rate_kbps(ambr_down_mbps: int) -> int:
+def meter_rate_kbps(ambr_mbps: int) -> int:
     # OpenFlow meters created with the "kbps" flag expect the rate in KILOBITS
     # per second. The previous conversion (* 125) produced kilobytes per second,
     # making enforcement 8x stricter than the intended AMBR.
     # Verified by measurement on 2026-09-08: a declared 100 Mbps profile produced
     # a 12500 kbps meter and iperf3 inside the tunnel measured 12.3 Mbps.
-    return ambr_down_mbps * 1000
+    return ambr_mbps * 1000
+
+
+def ovs_meters_enabled() -> bool:
+    """Whether the OVS meters on the access link are installed (FAIR5G_OVS_METERS).
+
+    OFF by default (#41). The meters sit on the link between the UE and the gNB,
+    which in UERANSIM is the simulated air interface: user data AND the radio
+    heartbeats share the same UDP socket. When a slice saturates, the meter drops
+    heartbeats along with data; two lost in a row (the UE gives up after 2 s
+    without one) and the UE declares radio link failure and never comes back.
+    No 5G network polices radio signalling with the AMBR, and the gNB already
+    enforces the AMBR itself, so the meters are a second limiter the real system
+    does not have. They stay available (=1) as a condition for the ablation and
+    for the per-slice aggregate limit.
+    """
+    return os.getenv("FAIR5G_OVS_METERS", "0").strip().lower() in ("1", "true", "yes", "on")

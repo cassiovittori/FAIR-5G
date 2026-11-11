@@ -24,6 +24,7 @@ from fair5gctl.core.slicing import (
     build_slice_specs,
     other_subnets,
     meter_rate_kbps,
+    ovs_meters_enabled,
     ACCESS_SUBNET,
     DEFAULT_SLICE_COUNT,
 )
@@ -256,23 +257,24 @@ def install_slice_flows(user: str, password: str, dpid: str, specs, ports: dict,
         print("[AVISO] IP do gNB não informado — flows de uplink ficam permissivos "
               "(UE alcança todo o core). Whitelist desativado.")
 
-    # Um conjunto de flows por UE. Todos os UEs de uma fatia referenciam o MESMO
-    # meter: o AMBR e agregado por fatia (semantica de Session-AMBR do 3GPP), nao
-    # por assinante. Assim, UEs da mesma fatia competem entre si pelo limite
-    # dela — cenario intra-slice que interessa ao modelo de ameacas.
+    # Um conjunto de flows por UE. Com os meters OVS ligados (FAIR5G_OVS_METERS=1),
+    # todos os UEs de uma fatia referenciam o MESMO par de meters (um por sentido):
+    # o limite fica agregado por fatia, e UEs da mesma fatia competem entre si por
+    # ele — cenario intra-slice do modelo de ameacas. Com os meters desligados
+    # (padrao), meter_ids vem vazio e os flows saem sem a instrucao METER.
     flows = []
     for spec in specs:
-        meter_id = meter_ids.get(spec.index)
+        meters = meter_ids.get(spec.index) or {}
         for ue in spec.ues:
             for dst_ip in allowed_dsts:
-                flows.append(allow_flow(ue.access_ip, dst_ip, meter_id))
+                flows.append(allow_flow(ue.access_ip, dst_ip, meters.get("up")))
             for deny_subnet in other_subnets(specs, spec.index):
                 flows.append(isolation_flow(ue.access_ip, deny_subnet))
     for spec in specs:
-        meter_id = meter_ids.get(spec.index)
+        meters = meter_ids.get(spec.index) or {}
         for ue in spec.ues:
-            flows.append(uplink_flow(ue.access_ip, meter_id))
-            flows.append(downlink_flow(ue.access_ip, ports[ue.name], meter_id))
+            flows.append(uplink_flow(ue.access_ip, meters.get("up")))
+            flows.append(downlink_flow(ue.access_ip, ports[ue.name], meters.get("down")))
 
     print(f"Instalando {len(flows)} flows proativos no switch {dpid}...")
     failed = 0
@@ -290,17 +292,19 @@ def install_slice_flows(user: str, password: str, dpid: str, specs, ports: dict,
     return False
 
 
-def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
+def remove_slice_meters(user: str, password: str, dpid: str) -> None:
+    """Delete every meter ONOS holds for the switch and wait until none is left.
+
+    ONOS keeps meters in its own store across bring-ups, so this also runs when
+    the OVS meters are disabled: a meter left over from an earlier run with
+    FAIR5G_OVS_METERS=1 would otherwise still show up in ONOS (and in verify).
+    """
     existing = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
     if existing:
         for m in existing.get("meters", []):
             mid = m.get("id")
             if mid:
                 _onos_request("DELETE", f"/onos/v1/meters/{dpid}/{mid}", user, password)
-
-    # burst = rate * 0.8192 reproduz os valores originais hardcoded (12500→10240, 1250→1024)
-    rate_by_index = {s.index: meter_rate_kbps(s.ambr_down_mbps) for s in specs}
-    burst_by_index = {s.index: max(int(rate_by_index[s.index] * 0.8192), 1) for s in specs}
 
     # Wait for the previous meters to be removed before creating the new ones:
     # creating on top of a state that is still dirty makes ONOS reuse ids the
@@ -311,7 +315,25 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
             break
         time.sleep(0.5)
 
-    print(f"Instalando {len(specs)} meters no switch {dpid}...")
+
+def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
+    """Two meters per slice, one per direction, at that direction's AMBR.
+
+    Returns {slice_index: {"down": meter_id, "up": meter_id}}; a direction whose
+    meter could not be confirmed maps to None (its flows go out without METER).
+
+    A single meter per slice at the DOWNLINK AMBR used to serve both directions,
+    so slice 1 (100/50 Mbps) had its uplink metered at 100 Mbps instead of 50.
+    """
+    remove_slice_meters(user, password, dpid)
+
+    wanted = []
+    for s in specs:
+        wanted.append((s.index, "down", meter_rate_kbps(s.ambr_down_mbps)))
+        wanted.append((s.index, "up", meter_rate_kbps(s.ambr_up_mbps)))
+
+    print(f"Instalando {len(wanted)} meters ({len(specs)} fatia(s) x 2 sentidos) "
+          f"no switch {dpid}...")
 
     # SERIALIZED creation: each meter is confirmed in ONOS before the next one.
     #
@@ -325,9 +347,13 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
     # (slice 1) while ONOS showed meter id=1 at 3000 kbps (slice 2). In practice
     # slice 1 ran with NO enforcement and slice 2 got a limit that was not its
     # own — with the log announcing success.
+    #
+    # Each meter is mapped to its slice and direction AS IT IS CONFIRMED, never
+    # afterwards by rate: several meters share a rate (slice 2 is 10/10 Mbps),
+    # and a rate -> id lookup made slices share one meter (observed 2026-09-09).
+    meter_ids = {s.index: {"down": None, "up": None} for s in specs}
     seen = set()
-    for spec in specs:
-        rate = rate_by_index[spec.index]
+    for index, direction, rate in wanted:
         payload = {
             "deviceId": dpid,
             "unit": "KB_PER_SEC",
@@ -335,15 +361,16 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
             "bands": [{
                 "type": "DROP",
                 "rate": rate,
-                "burstSize": burst_by_index[spec.index],
+                # burst = rate * 0.8192 reproduces the original hardcoded values
+                # (12500 -> 10240, 1250 -> 1024)
+                "burstSize": max(int(rate * 0.8192), 1),
             }],
         }
         result = _onos_request("POST", f"/onos/v1/meters/{dpid}", user, password, payload=payload)
         if result is None:
-            print(f"[WARN] POST of the meter for slice {spec.index} failed.")
+            print(f"[WARN] POST of the {direction} meter for slice {index} failed.")
             continue
 
-        # Confirm THIS meter showed up before creating the next one.
         confirmed = None
         for _ in range(20):
             data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password) or {}
@@ -351,67 +378,23 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
                 mid = m.get("id")
                 if mid in seen:
                     continue
-                for band in m.get("bands", []):
-                    if band.get("rate") == rate:
-                        confirmed = mid
-                        break
-                if confirmed:
+                if any(band.get("rate") == rate for band in m.get("bands", [])):
+                    confirmed = mid
                     break
             if confirmed:
                 break
             time.sleep(0.5)
 
         if confirmed is None:
-            print(f"[WARN] the meter for slice {spec.index} ({rate} kbps) was not "
-                  f"confirmed in ONOS after 10s.")
-        else:
-            seen.add(confirmed)
+            print(f"[AVISO] meter {direction} da fatia {index} ({rate} kbps) nao foi "
+                  f"confirmado no ONOS em 10s — esse sentido fica SEM meter.")
+            continue
+        seen.add(confirmed)
+        meter_ids[index][direction] = confirmed
+        print(f"Meter fatia {index} {direction}: id={confirmed} rate={rate} kbps")
 
-    meters_data = _onos_request("GET", f"/onos/v1/meters/{dpid}", user, password)
-    if not meters_data:
-        print("[AVISO] Não foi possível obter IDs dos meters — flows sem QoS enforcement.")
-        return {}
-
-    # Mapeia cada fatia ao SEU meter, consumindo cada id uma unica vez.
-    #
-    # A versao anterior montava um dicionario taxa -> id. Como os QOS_PROFILES
-    # se repetem ciclicamente, duas fatias com o mesmo AMBR colapsavam na mesma
-    # chave e passavam a compartilhar um unico meter — ou seja, dividiam um
-    # limite agregado em vez de terem um limite cada, enquanto o log informava
-    # que N meters haviam sido instalados. Observado em 2026-09-09 com 4 fatias:
-    # "Meter fatia 1: id=3" e "Meter fatia 3: id=3", com dois meters orfaos.
-    available = []
-    for m in meters_data.get("meters", []):
-        for band in m.get("bands", []):
-            r = band.get("rate")
-            if r in rate_by_index.values():
-                available.append((m.get("id"), r))
-                break
-
-    meter_ids = {}
-    used = set()
-    for spec in specs:
-        target_rate = rate_by_index[spec.index]
-        meter_id = None
-        for mid, r in available:
-            if r == target_rate and mid not in used:
-                meter_id = mid
-                used.add(mid)
-                break
-        if meter_id is None:
-            print(
-                f"[AVISO] nenhum meter disponivel para a fatia {spec.index} "
-                f"(taxa {target_rate} kbps) — esta fatia ficara SEM enforcement de QoS."
-            )
-        meter_ids[spec.index] = meter_id
-        print(f"Meter fatia {spec.index}: id={meter_id} rate={target_rate} kbps")
-
-    distintos = len({v for v in meter_ids.values() if v is not None})
-    if distintos != len(specs):
-        print(
-            f"[AVISO] {distintos} meter(s) distinto(s) para {len(specs)} fatia(s): "
-            f"ha fatias compartilhando limite agregado."
-        )
+    if len(seen) != len(wanted):
+        print(f"[AVISO] {len(seen)} meter(s) confirmado(s) de {len(wanted)} esperados.")
 
     # Cross-check ONOS's view against the switch's. The two can diverge (ONOS
     # records as created a meter the switch rejected), and in that case the real
@@ -421,7 +404,7 @@ def install_slice_meters(user: str, password: str, dpid: str, specs) -> dict:
         dump = run("ovs-ofctl -O OpenFlow13 dump-meters s1", check=False)
         if dump.stdout:
             switch_rates = sorted(int(m) for m in re.findall(r"rate=(\d+)", dump.stdout))
-            expected_rates = sorted(rate_by_index.values())
+            expected_rates = sorted(rate for _, _, rate in wanted)
             if switch_rates != expected_rates:
                 print(f"[WARN] ONOS/switch mismatch — rates on the switch: "
                       f"{switch_rates} kbps, expected: {expected_rates} kbps. "
@@ -781,7 +764,15 @@ def run_topology():
         print(f"gNB na rede de acesso: {gnb_ip or 'NÃO DESCOBERTO'}")
         print(f"Probe (blackbox) na rede de acesso: {probe_ip or 'ausente'}")
 
-        meter_ids = install_slice_meters(user, password, dpid, specs)
+        if ovs_meters_enabled():
+            meter_ids = install_slice_meters(user, password, dpid, specs)
+        else:
+            # Default (#41): the AMBR is enforced by the gNB, from the subscriber
+            # profile. See ovs_meters_enabled() for why the meters are off.
+            print("Meters OVS desligados (FAIR5G_OVS_METERS=0): o AMBR de cada "
+                  "fatia e aplicado pelo gNB.")
+            remove_slice_meters(user, password, dpid)
+            meter_ids = {}
         install_slice_flows(user, password, dpid, specs, ports, port_core, meter_ids,
                             gnb_ip, [probe_ip] if probe_ip else [])
         # fwd fica ativo: nossos flows proativos já casam com todo pacote IPv4 de/para
