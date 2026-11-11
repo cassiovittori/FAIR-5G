@@ -98,5 +98,6 @@ echo "[v0] Subindo SDN + UEs (Containernet + ONOS)..."
 sudo FAIR5G_CONFIG_DIR="$FAIR5G_CONFIG_DIR" \
   FAIR5G_SLICE_COUNT="$FAIR5G_SLICE_COUNT" \
   FAIR5G_UES_PER_SLICE="${FAIR5G_UES_PER_SLICE:-}" \
+  FAIR5G_OVS_METERS="${FAIR5G_OVS_METERS:-0}" \
   PYTHONPATH="$REPO_ROOT/containernet" \
   python3 "$REPO_ROOT/sdn/auto_sdn.py"

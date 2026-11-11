@@ -32,7 +32,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fair5gctl.core.slicing import build_slice_specs  # noqa: E402
+from fair5gctl.core.slicing import build_slice_specs, ovs_meters_enabled  # noqa: E402
 
 # ── buffered report ──────────────────────────────────────────────────────────
 # Mininet's CLI leaves the terminal in raw mode: '\n' no longer returns to
@@ -175,11 +175,14 @@ def check_onos_switch() -> tuple:
 
 
 def check_meters(specs) -> tuple:
-    """One distinct meter per slice.
+    """The OVS meters match FAIR5G_OVS_METERS.
 
-    Fewer meters than slices means slices are sharing an aggregate limit — the
-    collision bug fixed earlier. Worth checking on every bring-up so a
-    regression shows up immediately instead of skewing an experiment.
+    Off (default, #41): there must be NO meter, otherwise a leftover from an
+    earlier run is still limiting the access link and the round is not measuring
+    what it claims. On: two distinct meters per slice (one per direction); fewer
+    means slices or directions are sharing a limit — the collision bug fixed
+    earlier. Worth checking on every bring-up so a regression shows up
+    immediately instead of skewing an experiment.
     """
     try:
         data = _onos_get("/meters")
@@ -187,10 +190,16 @@ def check_meters(specs) -> tuple:
         return False, f"could not query meters: {e}"
 
     ids = {m.get("id") for m in data.get("meters", [])}
-    if len(ids) < len(specs):
-        return False, (f"{len(ids)} distinct meter(s) for {len(specs)} "
-                       f"slice(s): slices are sharing a limit")
-    return True, f"{len(ids)} distinct meter(s) installed"
+    if not ovs_meters_enabled():
+        if ids:
+            return False, (f"FAIR5G_OVS_METERS=0 but {len(ids)} meter(s) are "
+                           f"installed: leftover from an earlier run")
+        return True, "OVS meters off; the AMBR is enforced by the gNB"
+    expected = 2 * len(specs)
+    if len(ids) < expected:
+        return False, (f"{len(ids)} distinct meter(s) for {len(specs)} slice(s) "
+                       f"x 2 directions: a limit is being shared")
+    return True, f"{len(ids)} distinct meter(s) installed (2 per slice)"
 
 
 def check_prometheus() -> tuple:
@@ -235,7 +244,7 @@ def main() -> int:
         ("containers", lambda: check_containers(specs)),
         ("PDU sessions", lambda: check_pdu_sessions(specs)),
         ("switch in ONOS", check_onos_switch),
-        ("meters per slice", lambda: check_meters(specs)),
+        ("OVS meters", lambda: check_meters(specs)),
         ("Prometheus", check_prometheus),
     ]
 
