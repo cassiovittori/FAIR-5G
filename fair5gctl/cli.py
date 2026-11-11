@@ -384,12 +384,13 @@ STATE_FILE = REPO_ROOT / ".fair5g_state.json"
 
 
 def write_state(run_id: str, slice_count: int, config_dir: str = "",
-                ues_per_slice=None) -> None:
+                ues_per_slice=None, ovs_meters: bool = False) -> None:
     payload = {
         "run_id": run_id,
         "slice_count": int(slice_count),
         "ues_per_slice": ues_per_slice,
         "config_dir": config_dir,
+        "ovs_meters": bool(ovs_meters),
         "started_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -439,6 +440,14 @@ def main():
               "fatia (ex.: 3,1 = tres UEs na fatia 1 e um na fatia 2). A lista "
               "permite concentrar carga em uma fatia e observar a outra, cenario "
               "necessario para os experimentos de isolamento. Maximo 4 por fatia."),
+    )
+    p_up.add_argument(
+        "--ovs-meters",
+        action="store_true",
+        help=("Instala tambem os meters OVS no enlace de acesso (FAIR5G_OVS_METERS=1). "
+              "Desligado por padrao: o AMBR ja e aplicado pelo gNB, e o meter no "
+              "radio simulado descarta os heartbeats do UERANSIM e pode derrubar o UE "
+              "(issue #41). Use para a ablacao ou para o limite agregado por fatia."),
     )
     p_up.add_argument(
         "--detach",
@@ -516,13 +525,19 @@ def main():
                 print(f"[ERRO] {e}")
                 raise SystemExit(1)
             env["FAIR5G_UES_PER_SLICE"] = str(args.ues_per_slice)
+        # --ovs-meters or FAIR5G_OVS_METERS in the caller's environment; normalized
+        # to 1/0 so up_v0.sh, auto_sdn.py and the state file all see the same value.
+        meters_on = (getattr(args, "ovs_meters", False)
+                     or env.get("FAIR5G_OVS_METERS", "0").strip().lower() in ("1", "true", "yes", "on"))
+        env["FAIR5G_OVS_METERS"] = "1" if meters_on else "0"
         log_file = out / "up.log"
         run_simple("sudo -v")
         detach = getattr(args, "detach", False)
         if detach:
             env["FAIR5G_DETACH"] = "1"
         write_state(run_id, env["FAIR5G_SLICE_COUNT"], env.get("FAIR5G_CONFIG_DIR", ""),
-                    env.get("FAIR5G_UES_PER_SLICE"))
+                    env.get("FAIR5G_UES_PER_SLICE"),
+                    ovs_meters=meters_on)
 
         if detach:
             pid_file = REPO_ROOT / ".fair5g_topology.pid"

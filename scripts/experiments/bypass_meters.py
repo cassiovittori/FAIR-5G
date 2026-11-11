@@ -5,6 +5,13 @@ This serves the "environment ceiling" control experiment: measuring the maximum
 throughput a slice reaches when NO QoS limit is applied, so that what is a
 configured limit can be told apart from what is an environment limit.
 
+ONLY APPLIES WITH FAIR5G_OVS_METERS=1 (#41). The meters are off by default, and
+removing them never removes the AMBR: UERANSIM's gNB enforces it on its own,
+from the subscriber profile. Bypassing the meters measures the gNB's limit, not
+the environment's — a control with no enforcement needs the AMBR raised in the
+subscriber profile. Each slice has two meters (downlink and uplink); pass both
+ids to bypass the slice entirely: --meter-id 3,4.
+
 HOW THE BYPASS FLOWS ARE BUILT
 ------------------------------
 The selector is not guessed. The script READS the flow table from ONOS, finds
@@ -109,11 +116,12 @@ def selector_summary(flow):
     return f"{' '.join(parts) or '(no IP match)'} -> port {out or '?'}"
 
 
-def slice_flows(dpid, meter_id):
-    """Production flows that apply the target slice's meter."""
+def slice_flows(dpid, meter_ids):
+    """Production flows that apply any of the target meters."""
+    wanted = {str(m) for m in meter_ids}
     data = onos("GET", f"/onos/v1/flows/{dpid}") or {}
     return [f for f in data.get("flows", [])
-            if meter_of(f) == str(meter_id) and f.get("priority") != PRIORITY]
+            if meter_of(f) in wanted and f.get("priority") != PRIORITY]
 
 
 def show_meters(dpid):
@@ -143,14 +151,16 @@ def show_flows():
     print("\n(flows with n_packets=0 were omitted)")
 
 
-def turn_on(dpid, meter_id):
-    originals = slice_flows(dpid, meter_id)
+def turn_on(dpid, meter_ids):
+    label = ",".join(meter_ids)
+    originals = slice_flows(dpid, meter_ids)
     if not originals:
-        print(f"[ERROR] no production flow uses meter {meter_id}.")
-        print("        Check the id with 'status' and pass --meter-id.")
+        print(f"[ERROR] no production flow uses meter(s) {label}.")
+        print("        Check the ids with 'status' and pass --meter-id.")
+        print("        (With FAIR5G_OVS_METERS=0, the default, there are no meters.)")
         sys.exit(1)
 
-    print(f"Cloning {len(originals)} flow(s) of meter {meter_id} without the METER instruction:")
+    print(f"Cloning {len(originals)} flow(s) of meter(s) {label} without the METER instruction:")
     installed = 0
     for f in originals:
         instructions = [i for i in f.get("treatment", {}).get("instructions", [])
@@ -193,7 +203,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("action", choices=["on", "off", "status", "flows"])
     ap.add_argument("--meter-id", default="1",
-                    help="meter of the slice to bypass (default: 1, slice 1)")
+                    help=("meter id(s) to bypass, comma-separated; each slice has a "
+                          "downlink and an uplink meter (see 'status'). Default: 1"))
     args = ap.parse_args()
 
     if args.action == "flows":
@@ -205,7 +216,7 @@ def main():
         print(f"Meters on {dpid}:")
         show_meters(dpid)
     elif args.action == "on":
-        turn_on(dpid, args.meter_id)
+        turn_on(dpid, [m.strip() for m in args.meter_id.split(",") if m.strip()])
     else:
         turn_off(dpid)
 
